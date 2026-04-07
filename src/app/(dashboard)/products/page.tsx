@@ -1,20 +1,35 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, AlertCircle, PackageOpen } from "lucide-react";
+import { Loader2, AlertCircle, PackageOpen, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { AddProductDialog } from "@/components/products/AddProductDialog";
 import { ProductCard } from "@/components/products/ProductCard";
 import { createClient } from "@/lib/supabase/client";
 import { getProducts } from "@/lib/supabase/queries";
 import type { ProductWithAttributes } from "@/lib/supabase/types";
 
+function matchesSearch(p: ProductWithAttributes, query: string): boolean {
+  const q = query.toLowerCase();
+  if (p.name.toLowerCase().includes(q)) return true;
+  if (p.category.toLowerCase().includes(q)) return true;
+  const attrs = p.product_attributes?.[0];
+  if (attrs?.clothing_type?.toLowerCase().includes(q)) return true;
+  if (attrs?.style_tags && Array.isArray(attrs.style_tags)) {
+    if ((attrs.style_tags as string[]).some((t) => t.toLowerCase().includes(q)))
+      return true;
+  }
+  return false;
+}
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<ProductWithAttributes[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -35,6 +50,10 @@ export default function ProductsPage() {
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
+
+  const filtered = search
+    ? products.filter((p) => matchesSearch(p, search))
+    : products;
 
   return (
     <div className="space-y-6">
@@ -72,15 +91,39 @@ export default function ProductsPage() {
         </div>
       ) : (
         <>
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, category, or style tag..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Badge variant="secondary">{products.length}</Badge>
-            product{products.length !== 1 && "s"} in catalog
+            <Badge variant="secondary">{filtered.length}</Badge>
+            {search
+              ? `of ${products.length} product${products.length !== 1 ? "s" : ""}`
+              : `product${filtered.length !== 1 ? "s" : ""} in catalog`}
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
+
+          {filtered.length === 0 ? (
+            <div className="flex h-48 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+              No products match &ldquo;{search}&rdquo;
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {filtered.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  onProductChanged={fetchProducts}
+                />
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>

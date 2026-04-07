@@ -45,6 +45,22 @@ export async function insertProduct(supabase: Client, product: ProductInsert) {
   return data as Product;
 }
 
+export async function updateProduct(
+  supabase: Client,
+  id: string,
+  updates: Database["public"]["Tables"]["products"]["Update"]
+) {
+  const { data, error } = await supabase
+    .from("products")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Product;
+}
+
 export async function deleteProduct(supabase: Client, id: string) {
   const { error } = await supabase.from("products").delete().eq("id", id);
   if (error) throw error;

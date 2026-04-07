@@ -1,21 +1,32 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, AlertCircle, Shirt, Sparkles } from "lucide-react";
+import { Loader2, AlertCircle, Search, Shirt, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { OutfitCard } from "@/components/outfits/OutfitCard";
 import { createClient } from "@/lib/supabase/client";
 import { getOutfits } from "@/lib/supabase/queries";
 import { generateOutfits } from "@/lib/outfits/generate";
 import type { OutfitWithDetails } from "@/lib/supabase/types";
 
+function matchesSearch(o: OutfitWithDetails, query: string): boolean {
+  const q = query.toLowerCase();
+  if (o.title?.toLowerCase().includes(q)) return true;
+  if (o.theme_name?.toLowerCase().includes(q)) return true;
+  return o.outfit_items.some((item) =>
+    item.products?.name?.toLowerCase().includes(q)
+  );
+}
+
 export default function OutfitsPage() {
   const [outfits, setOutfits] = useState<OutfitWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const fetchOutfits = useCallback(async () => {
     setLoading(true);
@@ -25,7 +36,8 @@ export default function OutfitsPage() {
       const data = await getOutfits(supabase);
       setOutfits(data);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load outfits";
+      const msg =
+        err instanceof Error ? err.message : "Failed to load outfits";
       setError(msg);
     } finally {
       setLoading(false);
@@ -51,6 +63,10 @@ export default function OutfitsPage() {
       setGenerating(false);
     }
   }
+
+  const filtered = search
+    ? outfits.filter((o) => matchesSearch(o, search))
+    : outfits;
 
   return (
     <div className="space-y-6">
@@ -96,15 +112,35 @@ export default function OutfitsPage() {
         </div>
       ) : (
         <>
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search by theme or product name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Badge variant="secondary">{outfits.length}</Badge>
-            outfit{outfits.length !== 1 && "s"} generated
+            <Badge variant="secondary">{filtered.length}</Badge>
+            {search
+              ? `of ${outfits.length} outfit${outfits.length !== 1 ? "s" : ""}`
+              : `outfit${filtered.length !== 1 ? "s" : ""} generated`}
           </div>
-          <div className="grid gap-6 lg:grid-cols-2">
-            {outfits.map((outfit) => (
-              <OutfitCard key={outfit.id} outfit={outfit} />
-            ))}
-          </div>
+
+          {filtered.length === 0 ? (
+            <div className="flex h-48 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+              No outfits match &ldquo;{search}&rdquo;
+            </div>
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-2">
+              {filtered.map((outfit) => (
+                <OutfitCard key={outfit.id} outfit={outfit} />
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>
