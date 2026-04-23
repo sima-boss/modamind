@@ -23,7 +23,7 @@ const FALLBACK_CONTENT = {
     "Stick to a coordinated color palette for a sharper appearance.",
   ],
   social_caption:
-    "Clean lines, effortless confidence, and styling that works all day. #ModaMind #SmartStyle #OutfitInspo",
+    "Clean lines, effortless confidence, and styling that works all day. #Fashnix #SmartStyle #OutfitInspo",
 };
 
 export async function POST(req: NextRequest) {

@@ -7,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "ModaMind",
+  title: "Fashnix",
   description: "AI-powered fashion intelligence for modern brands",
 };
 

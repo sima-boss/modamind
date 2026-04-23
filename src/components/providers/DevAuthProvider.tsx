@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 
 // ── DEV-ONLY credentials ─────────────────────────────────
 // Replace this with real auth when building the login flow.
-const DEV_EMAIL = "demo@modamind.com";
+const DEV_EMAIL = "demo@fashnix.com";
 const DEV_PASSWORD = "12345678";
 
 const AuthContext = createContext<Session | null>(null);

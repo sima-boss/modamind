@@ -92,7 +92,7 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
         cacheBust: true,
       });
       const link = document.createElement("a");
-      link.download = `${(outfit.title ?? "outfit").replace(/\s+/g, "-").toLowerCase()}-modamind.png`;
+      link.download = `${(outfit.title ?? "outfit").replace(/\s+/g, "-").toLowerCase()}-fashnix.png`;
       link.href = dataUrl;
       link.click();
     } catch {

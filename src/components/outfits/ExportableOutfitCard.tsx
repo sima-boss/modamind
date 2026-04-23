@@ -237,7 +237,7 @@ export const ExportableOutfitCard = forwardRef<
         }}
       >
         <span style={{ fontSize: 20, fontWeight: 700, color: "#7c3aed" }}>
-          ModaMind
+          Fashnix
         </span>
         <span style={{ fontSize: 13, color: "#9ca3af" }}>
           AI-Powered Fashion Intelligence

@@ -91,7 +91,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">
-          Welcome to ModaMind
+          Welcome to Fashnix
         </h2>
         <p className="text-muted-foreground">
           Your AI-powered fashion intelligence hub.

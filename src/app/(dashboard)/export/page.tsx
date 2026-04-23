@@ -78,7 +78,7 @@ function downloadProductsCsv(products: ProductWithAttributes[]) {
 
   const csv = [headers.join(","), ...rows].join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
-  downloadBlob(blob, "modamind-products.csv");
+  downloadBlob(blob, "fashnix-products.csv");
 }
 
 // ── Page ──────────────────────────────────────────────────
@@ -115,7 +115,7 @@ export default function ExportPage() {
       description: `Export all ${products.length} products with AI attributes as a JSON file.`,
       icon: FileJson,
       disabled: products.length === 0,
-      onClick: () => downloadJson(products, "modamind-products.json"),
+      onClick: () => downloadJson(products, "fashnix-products.json"),
     },
     {
       title: "Products as CSV",
@@ -129,7 +129,7 @@ export default function ExportPage() {
       description: `Export all ${outfits.length} outfits with items and AI content as a JSON file.`,
       icon: Shirt,
       disabled: outfits.length === 0,
-      onClick: () => downloadJson(outfits, "modamind-outfits.json"),
+      onClick: () => downloadJson(outfits, "fashnix-outfits.json"),
     },
   ];
 

@@ -15,7 +15,7 @@ const pageTitles: Record<string, string> = {
 
 export function Header() {
   const pathname = usePathname();
-  const title = pageTitles[pathname] ?? "ModaMind";
+  const title = pageTitles[pathname] ?? "Fashnix";
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/80 px-6 backdrop-blur-sm">
@@ -38,7 +38,7 @@ export function Header() {
         </Button>
 
         <Avatar className="h-8 w-8">
-          <AvatarFallback className="text-xs font-medium">MM</AvatarFallback>
+          <AvatarFallback className="text-xs font-medium">FX</AvatarFallback>
         </Avatar>
       </div>
     </header>

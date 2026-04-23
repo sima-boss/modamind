@@ -42,9 +42,9 @@ export function Sidebar() {
       {/* Brand */}
       <div className="flex h-16 items-center gap-2 px-6">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold">
-          M
+          F
         </div>
-        <span className="text-lg font-semibold tracking-tight">ModaMind</span>
+        <span className="text-lg font-semibold tracking-tight">Fashnix</span>
       </div>
 
       <Separator />

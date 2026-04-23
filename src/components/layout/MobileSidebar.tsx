@@ -39,9 +39,9 @@ export function MobileSidebar() {
       <SheetContent side="left" className="w-64 p-0">
         <div className="flex h-16 items-center gap-2 px-6">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold">
-            M
+            F
           </div>
-          <span className="text-lg font-semibold tracking-tight">ModaMind</span>
+          <span className="text-lg font-semibold tracking-tight">Fashnix</span>
         </div>
         <Separator />
         <nav className="flex-1 space-y-1 px-3 py-4">
