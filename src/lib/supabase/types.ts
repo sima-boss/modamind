@@ -189,6 +189,35 @@ export interface Database {
           },
         ];
       };
+      profiles: {
+        Row: {
+          id: string;
+          full_name: string | null;
+          business_name: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          full_name?: string | null;
+          business_name?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          full_name?: string | null;
+          business_name?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "profiles_id_fkey";
+            columns: ["id"];
+            isOneToOne: true;
+            referencedRelation: "";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -206,6 +235,7 @@ export type Outfit = Database["public"]["Tables"]["outfits"]["Row"];
 export type OutfitItem = Database["public"]["Tables"]["outfit_items"]["Row"];
 export type OutfitContent =
   Database["public"]["Tables"]["outfit_content"]["Row"];
+export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
 export type ProductWithAttributes = Product & {
   product_attributes: ProductAttributes[];

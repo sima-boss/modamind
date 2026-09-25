@@ -1,6 +1,6 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
-import { DevAuthProvider } from "@/components/providers/DevAuthProvider";
+import { AuthProvider } from "@/components/providers/AuthProvider";
 
 export default function DashboardLayout({
   children,
@@ -8,7 +8,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <DevAuthProvider>
+    <AuthProvider>
       <div className="min-h-screen bg-background">
         {/* Desktop sidebar */}
         <div className="hidden lg:block">
@@ -21,6 +21,6 @@ export default function DashboardLayout({
           <main className="p-6">{children}</main>
         </div>
       </div>
-    </DevAuthProvider>
+    </AuthProvider>
   );
 }

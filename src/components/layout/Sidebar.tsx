@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
+import { useLogout } from "@/lib/hooks/use-logout";
 
 const icons = {
   LayoutDashboard,
@@ -36,6 +37,7 @@ const links: SidebarLink[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { logout, loggingOut } = useLogout();
 
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r bg-sidebar text-sidebar-foreground">
@@ -78,9 +80,13 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="p-3">
-        <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground">
+        <button
+          onClick={logout}
+          disabled={loggingOut}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground disabled:opacity-50"
+        >
           <LogOut className="h-4 w-4" />
-          Log out
+          {loggingOut ? "Logging out..." : "Log out"}
         </button>
       </div>
     </aside>

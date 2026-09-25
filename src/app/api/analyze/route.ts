@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const SYSTEM_PROMPT = `You are a fashion product analyst. Given a product image, return a JSON object with these exact fields:
 
@@ -26,6 +27,14 @@ type SupportedMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = createServerSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { imageUrl } = await req.json();
 
     if (!imageUrl || typeof imageUrl !== "string") {

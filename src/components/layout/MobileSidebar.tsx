@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { useLogout } from "@/lib/hooks/use-logout";
 
 const icons = { LayoutDashboard, ShoppingBag, Shirt, Download } as const;
 type IconName = keyof typeof icons;
@@ -28,6 +29,7 @@ const links: SidebarLink[] = [
 export function MobileSidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const { logout, loggingOut } = useLogout();
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -69,9 +71,16 @@ export function MobileSidebar() {
         </nav>
         <Separator />
         <div className="p-3">
-          <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-accent-foreground">
+          <button
+            onClick={() => {
+              setOpen(false);
+              logout();
+            }}
+            disabled={loggingOut}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-accent-foreground disabled:opacity-50"
+          >
             <LogOut className="h-4 w-4" />
-            Log out
+            {loggingOut ? "Logging out..." : "Log out"}
           </button>
         </div>
       </SheetContent>
