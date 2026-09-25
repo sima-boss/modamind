@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useSession } from "@/components/providers/AuthProvider";
 import { useLogout } from "@/lib/hooks/use-logout";
+import { MobileSidebar } from "@/components/layout/MobileSidebar";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -32,8 +33,11 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/80 px-6 backdrop-blur-sm">
-      {/* Page title */}
-      <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+      {/* Mobile nav trigger + page title */}
+      <div className="flex items-center gap-3">
+        <MobileSidebar />
+        <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+      </div>
 
       {/* Right section */}
       <div className="flex items-center gap-3">
