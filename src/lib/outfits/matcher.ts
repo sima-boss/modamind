@@ -42,7 +42,7 @@ export interface OutfitCandidate {
 // ── Constants ──────────────────────────────────────────────
 
 /** Map product categories → outfit role */
-const CATEGORY_TO_ROLE: Record<string, string> = {
+export const CATEGORY_TO_ROLE: Record<string, string> = {
   tops: "top",
   bottoms: "bottom",
   dresses: "dress",
@@ -50,6 +50,11 @@ const CATEGORY_TO_ROLE: Record<string, string> = {
   shoes: "shoes",
   bags: "accessory",
   accessories: "accessory",
+  activewear: "top",
+  swimwear: "top",
+  jewelry: "accessory",
+  watches: "accessory",
+  scarves: "accessory",
 };
 
 interface Theme {
@@ -138,7 +143,106 @@ const THEMES: Theme[] = [
     avoided: ["sporty", "athletic", "joggers", "shorts", "hoodie"],
     preferDark: true,
   },
+  {
+    name: "Gym / Athleisure",
+    title: "Gym / Athleisure",
+    formality: ["casual"],
+    requiredRoles: [
+      ["top", "bottom", "shoes"],
+      ["top", "bottom"],
+    ],
+    preferred: [
+      "athletic", "sporty", "joggers", "sneakers", "hoodie",
+      "leggings", "workout", "activewear",
+    ],
+    avoided: ["formal", "heels", "suit", "blazer"],
+    preferDark: false,
+  },
+  {
+    name: "Date Night",
+    title: "Date Night",
+    formality: ["formal", "smart-casual"],
+    requiredRoles: [
+      ["dress", "shoes", "accessory"],
+      ["top", "bottom", "shoes", "accessory"],
+      ["dress", "shoes"],
+      ["top", "bottom", "shoes"],
+    ],
+    preferred: [
+      "elegant", "romantic", "chic", "heels", "dress", "sleek", "fitted",
+    ],
+    avoided: ["athletic", "sporty", "joggers", "hoodie", "shorts"],
+    preferDark: true,
+  },
+  {
+    name: "Streetwear",
+    title: "Streetwear",
+    formality: ["casual", "smart-casual"],
+    requiredRoles: [
+      ["top", "bottom", "shoes"],
+      ["top", "bottom", "outerwear", "shoes"],
+      ["top", "bottom"],
+    ],
+    preferred: [
+      "streetwear", "oversized", "sneakers", "hoodie", "graphic",
+      "urban", "bold", "casual",
+    ],
+    avoided: ["formal", "office", "tailored", "heels", "elegant"],
+    preferDark: false,
+  },
+  {
+    name: "Beach / Resort",
+    title: "Beach / Resort",
+    formality: ["casual"],
+    requiredRoles: [
+      ["top", "bottom", "shoes"],
+      ["dress", "shoes"],
+      ["top", "bottom"],
+    ],
+    preferred: [
+      "light", "summer", "sandals", "shorts", "linen", "flowy",
+      "relaxed", "beach",
+    ],
+    avoided: ["formal", "suit", "blazer", "heavy", "winter", "boots"],
+    preferDark: false,
+  },
+  {
+    name: "Eid / Celebration",
+    title: "Eid / Celebration",
+    formality: ["formal"],
+    requiredRoles: [
+      ["dress", "shoes", "accessory"],
+      ["top", "bottom", "shoes", "accessory"],
+      ["dress", "shoes"],
+      ["top", "bottom", "shoes"],
+    ],
+    preferred: [
+      "elegant", "formal", "traditional", "luxurious", "embroidered",
+      "rich", "festive", "gold", "silk",
+    ],
+    avoided: ["casual", "athletic", "sporty", "denim", "sneakers"],
+    preferDark: false,
+  },
+  {
+    name: "Business Meeting",
+    title: "Business Meeting",
+    formality: ["formal", "smart-casual"],
+    requiredRoles: [
+      ["top", "bottom", "shoes"],
+      ["top", "bottom", "outerwear", "shoes"],
+      ["top", "bottom"],
+    ],
+    preferred: [
+      "professional", "sharp", "tailored", "blazer", "shirt", "trousers",
+      "polished", "classic", "formal",
+    ],
+    avoided: ["casual", "sneakers", "hoodie", "shorts", "athletic", "joggers"],
+    preferDark: false,
+  },
 ];
+
+/** All theme names, in declaration order — for UI selection lists. */
+export const THEME_NAMES: string[] = THEMES.map((t) => t.name);
 
 // ── Scoring weights ───────────────────────────────────────
 
@@ -163,7 +267,7 @@ function shuffle<T>(array: T[]): T[] {
 }
 
 /** Order-independent key from a set of IDs */
-function comboKey(ids: string[]): string {
+export function comboKey(ids: string[]): string {
   return [...ids].sort().join(",");
 }
 
@@ -319,11 +423,16 @@ function coreKey(
 /**
  * Generate one outfit per theme, maximizing both quality and diversity.
  *
- * @param existingKeys  Combo keys for outfits already in DB — hard-skipped.
+ * @param existingKeys    Combo keys for outfits already in DB (or produced in
+ *                        an earlier call within the same generation run) —
+ *                        hard-skipped.
+ * @param selectedThemes  When provided, only themes whose `name` is in this
+ *                        list are considered. Omit to use every theme.
  */
 export function matchOutfits(
   products: ProductWithAttributes[],
-  existingKeys?: Set<string>
+  existingKeys?: Set<string>,
+  selectedThemes?: string[]
 ): OutfitCandidate[] {
   const usedFullKeys = new Set(existingKeys);
   const usedCoreKeys = new Set<string>();
@@ -345,7 +454,10 @@ export function matchOutfits(
   const results: OutfitCandidate[] = [];
 
   // Shuffle theme processing order so no theme always gets first pick
-  const themes = shuffle(THEMES);
+  const themePool = selectedThemes
+    ? THEMES.filter((t) => selectedThemes.includes(t.name))
+    : THEMES;
+  const themes = shuffle(themePool);
 
   for (const theme of themes) {
     const topCandidates: {

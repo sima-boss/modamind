@@ -3,12 +3,31 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { toPng } from "html-to-image";
-import { Download, Loader2, ShoppingBag, Sparkles, Type } from "lucide-react";
+import {
+  Check,
+  Download,
+  Layout,
+  Loader2,
+  Share2,
+  ShoppingBag,
+  Sparkles,
+  Type,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
 import { insertOutfitContent } from "@/lib/supabase/queries";
 import type { OutfitContent, OutfitWithDetails } from "@/lib/supabase/types";
+import {
+  getThemeGradient,
+  getThemeTextColor,
+} from "@/lib/outfits/virtual-model";
+import {
+  EXPORT_FORMATS,
+  DEFAULT_EXPORT_FORMAT,
+  getExportFormat,
+} from "@/lib/outfits/export-formats";
 import { ExportableOutfitCard } from "./ExportableOutfitCard";
 
 interface OutfitCardProps {
@@ -24,6 +43,9 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showMoodBoard, setShowMoodBoard] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [formatId, setFormatId] = useState(DEFAULT_EXPORT_FORMAT.id);
   const exportRef = useRef<HTMLDivElement>(null);
 
   async function handleGenerateContent() {
@@ -87,12 +109,16 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
     setExporting(true);
     setError(null);
     try {
+      const format = getExportFormat(formatId);
       const dataUrl = await toPng(exportRef.current, {
         pixelRatio: 2,
         cacheBust: true,
+        width: format.width,
+        height: format.height,
       });
       const link = document.createElement("a");
-      link.download = `${(outfit.title ?? "outfit").replace(/\s+/g, "-").toLowerCase()}-fashnix.png`;
+      const slug = (outfit.title ?? "outfit").replace(/\s+/g, "-").toLowerCase();
+      link.download = `${slug}-${format.id}-fashnix.png`;
       link.href = dataUrl;
       link.click();
     } catch {
@@ -101,6 +127,34 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
       setExporting(false);
     }
   }
+
+  function handleToggleMoodBoard() {
+    setShowMoodBoard((prev) => !prev);
+  }
+
+  async function handleShare() {
+    setError(null);
+    try {
+      const url = `${window.location.origin}/lookbook/${outfit.id}`;
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Could not copy the share link.");
+    }
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  Mood-board layout helpers                                        */
+  /* ---------------------------------------------------------------- */
+
+  const gradient = getThemeGradient(outfit.theme_name);
+  const textColor = getThemeTextColor(outfit.theme_name);
+
+  // Separate items with images from those without
+  const withImages = items.filter((i) => i.products?.image_url);
+  const heroItem = withImages[0];
+  const sideItems = withImages.slice(1);
 
   return (
     <>
@@ -117,21 +171,53 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant={showMoodBoard ? "default" : "outline"}
+            size="sm"
+            onClick={handleToggleMoodBoard}
+          >
+            <Layout className="mr-1.5 h-3.5 w-3.5" />
+            Mood Board
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={handleShare}>
+            {copied ? (
+              <Check className="mr-1.5 h-3.5 w-3.5" />
+            ) : (
+              <Share2 className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            {copied ? "Copied!" : "Share"}
+          </Button>
+
           {content && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExport}
-              disabled={exporting}
-            >
-              {exporting ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Download className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              {exporting ? "Exporting..." : "Export Card"}
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Select
+                value={formatId}
+                onChange={(e) => setFormatId(e.target.value)}
+                className="h-8 w-[150px] text-xs"
+                aria-label="Export format"
+              >
+                {EXPORT_FORMATS.map((format) => (
+                  <option key={format.id} value={format.id}>
+                    {format.label}
+                  </option>
+                ))}
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                disabled={exporting}
+              >
+                {exporting ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                {exporting ? "Exporting..." : "Export"}
+              </Button>
+            </div>
           )}
           {!content && (
             <Button
@@ -184,6 +270,157 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
           );
         })}
       </div>
+
+      {/* ── Mood board collage ── */}
+      {showMoodBoard && (
+        <div className="border-t px-4 py-4">
+          <div
+            className="relative mx-auto max-w-md overflow-hidden rounded-xl shadow-lg"
+            style={{ background: gradient }}
+          >
+            {/* Title overlay */}
+            <div className="px-5 pt-5 pb-3" style={{ color: textColor }}>
+              <p className="text-lg font-bold leading-tight">
+                {outfit.title ?? "Outfit"}
+              </p>
+              {outfit.theme_name && (
+                <p className="mt-0.5 text-xs font-medium opacity-80">
+                  {outfit.theme_name}
+                </p>
+              )}
+            </div>
+
+            {/* Collage grid */}
+            {withImages.length > 0 && (
+              <div className="px-3 pb-4">
+                {withImages.length === 1 ? (
+                  /* Single product — centred large */
+                  <div className="relative mx-auto aspect-square w-3/4 overflow-hidden rounded-lg shadow-md">
+                    <Image
+                      src={heroItem!.products!.image_url!}
+                      alt={heroItem!.products?.name ?? ""}
+                      fill
+                      className="object-cover"
+                      sizes="300px"
+                    />
+                    <div
+                      className="absolute bottom-0 left-0 right-0 px-2 py-1.5"
+                      style={{
+                        background:
+                          "linear-gradient(transparent, rgba(0,0,0,0.6))",
+                      }}
+                    >
+                      <p className="text-xs font-medium text-white truncate">
+                        {heroItem!.products?.name}
+                      </p>
+                    </div>
+                  </div>
+                ) : withImages.length === 2 ? (
+                  /* Two products side by side */
+                  <div className="grid grid-cols-2 gap-2">
+                    {withImages.map((item) => (
+                      <div
+                        key={item.id}
+                        className="relative aspect-square overflow-hidden rounded-lg shadow-md"
+                      >
+                        <Image
+                          src={item.products!.image_url!}
+                          alt={item.products?.name ?? ""}
+                          fill
+                          className="object-cover"
+                          sizes="200px"
+                        />
+                        <div
+                          className="absolute bottom-0 left-0 right-0 px-2 py-1.5"
+                          style={{
+                            background:
+                              "linear-gradient(transparent, rgba(0,0,0,0.6))",
+                          }}
+                        >
+                          <p className="text-[10px] font-medium text-white truncate">
+                            {item.products?.name}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  /* 3+ products — hero on left, stack on right */
+                  <div className="grid grid-cols-5 gap-2">
+                    {/* Hero image — takes 3/5 columns */}
+                    <div className="col-span-3 relative aspect-[3/4] overflow-hidden rounded-lg shadow-md">
+                      <Image
+                        src={heroItem!.products!.image_url!}
+                        alt={heroItem!.products?.name ?? ""}
+                        fill
+                        className="object-cover"
+                        sizes="300px"
+                      />
+                      <div
+                        className="absolute bottom-0 left-0 right-0 px-2 py-1.5"
+                        style={{
+                          background:
+                            "linear-gradient(transparent, rgba(0,0,0,0.6))",
+                        }}
+                      >
+                        <p className="text-xs font-medium text-white truncate">
+                          {heroItem!.products?.name}
+                        </p>
+                        <p className="text-[10px] capitalize text-white/70">
+                          {heroItem!.role}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Side stack — 2/5 columns */}
+                    <div className="col-span-2 flex flex-col gap-2">
+                      {sideItems.slice(0, 3).map((item) => (
+                        <div
+                          key={item.id}
+                          className="relative aspect-square overflow-hidden rounded-lg shadow-md"
+                        >
+                          <Image
+                            src={item.products!.image_url!}
+                            alt={item.products?.name ?? ""}
+                            fill
+                            className="object-cover"
+                            sizes="150px"
+                          />
+                          <div
+                            className="absolute bottom-0 left-0 right-0 px-1.5 py-1"
+                            style={{
+                              background:
+                                "linear-gradient(transparent, rgba(0,0,0,0.6))",
+                            }}
+                          >
+                            <p className="text-[10px] font-medium text-white truncate">
+                              {item.products?.name}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Branding strip */}
+            <div
+              className="flex items-center justify-center gap-1 pb-3"
+              style={{ color: textColor }}
+            >
+              <Sparkles className="h-3 w-3 opacity-70" />
+              <span className="text-[10px] font-medium opacity-70">
+                Styled with Fashnix
+              </span>
+            </div>
+          </div>
+          <p className="mt-2 text-center text-[11px] italic text-muted-foreground">
+            Outfit mood board • Product images from your catalog
+          </p>
+        </div>
+      )}
 
       {/* AI content */}
       {content && (
@@ -249,6 +486,10 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
           ref={exportRef}
           outfit={outfit}
           content={content}
+          modelUrl={null}
+          width={getExportFormat(formatId).width}
+          height={getExportFormat(formatId).height}
+          layout={getExportFormat(formatId).layout}
         />
       </div>
     )}

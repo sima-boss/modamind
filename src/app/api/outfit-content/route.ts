@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const SYSTEM_PROMPT = `You are a fashion marketing copywriter. Given an outfit's items and their style attributes, return a JSON object with exactly these fields:
 
@@ -60,21 +57,38 @@ export async function POST(req: NextRequest) {
 
   // Attempt AI generation — fall back gracefully on any failure
   try {
-    if (!process.env.ANTHROPIC_API_KEY) throw new Error("No API key");
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("No API key");
 
     const userMessage = `Generate marketing content for this outfit:\n\n${itemDescriptions}`;
 
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 512,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
+    // Call Anthropic API directly via fetch to avoid SDK base64 conversion bug
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-5",
+        max_tokens: 512,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: userMessage }],
+      }),
     });
 
-    const textBlock = message.content.find((b) => b.type === "text");
-    if (!textBlock || textBlock.type !== "text") throw new Error("Empty AI response");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error?.message ?? "API error");
 
-    const raw = textBlock.text.replace(/```json?\n?|```/g, "").trim();
+    const textBlock = data.content?.find(
+      (b: { type: string }) => b.type === "text"
+    );
+    if (!textBlock) throw new Error("Empty AI response");
+
+    const raw = (textBlock.text as string)
+      .replace(/```json?\n?|```/g, "")
+      .trim();
     const content = JSON.parse(raw);
 
     return NextResponse.json({ content, fallback: false });

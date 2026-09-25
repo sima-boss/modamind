@@ -3,45 +3,82 @@
 
 import { forwardRef } from "react";
 import type { OutfitContent, OutfitWithDetails } from "@/lib/supabase/types";
+import type { ExportLayout } from "@/lib/outfits/export-formats";
 
 interface ExportableOutfitCardProps {
   outfit: OutfitWithDetails;
   content: OutfitContent;
+  modelUrl?: string | null;
+  width: number;
+  height: number;
+  layout: ExportLayout;
 }
 
 export const ExportableOutfitCard = forwardRef<
   HTMLDivElement,
   ExportableOutfitCardProps
->(function ExportableOutfitCard({ outfit, content }, ref) {
+>(function ExportableOutfitCard({ outfit, content, width, height, layout }, ref) {
   const items = outfit.outfit_items ?? [];
+
+  // Scale factors based on format
+  const scale = width / 1080; // base design is 1080
+  const pad = Math.round(36 * scale);
+  const titleSize = Math.round(layout === "story" ? 32 : 30) * scale;
+  const badgeSize = Math.round(13 * scale);
+  const labelSize = Math.round(11 * scale);
+  const bodySize = Math.round(14 * scale);
+  const captionSize = Math.round(13 * scale);
+  const tipSize = Math.round(13 * scale);
+  const brandSize = Math.round(18 * scale);
+  const brandSubSize = Math.round(11 * scale);
+
+  // Grid columns: story = 2 cols, square = up to 4, default = up to 4
+  const cols = layout === "story" ? 2 : Math.min(items.length, 4);
+
+  // For story layout, use smaller product images to fit everything
+  const productPad = Math.round(8 * scale);
+  const productRadius = Math.round(8 * scale);
+  const gap = Math.round(12 * scale);
 
   return (
     <div
       ref={ref}
       style={{
-        width: 1080,
-        padding: 48,
+        width,
+        height,
+        padding: pad,
         background:
           "linear-gradient(135deg, #faf5ff 0%, #f5f3ff 50%, #ede9fe 100%)",
         fontFamily: "system-ui, -apple-system, sans-serif",
         color: "#1a1a2e",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        boxSizing: "border-box",
       }}
     >
       {/* Header */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 36, fontWeight: 700, margin: 0 }}>
+      <div style={{ marginBottom: Math.round(16 * scale), flexShrink: 0 }}>
+        <h2
+          style={{
+            fontSize: titleSize,
+            fontWeight: 700,
+            margin: 0,
+            lineHeight: 1.2,
+          }}
+        >
           {outfit.title ?? "Untitled Outfit"}
         </h2>
         {outfit.theme_name && (
           <span
             style={{
               display: "inline-block",
-              marginTop: 10,
-              padding: "5px 14px",
+              marginTop: Math.round(6 * scale),
+              padding: `${Math.round(4 * scale)}px ${Math.round(12 * scale)}px`,
               background: "#7c3aed",
               color: "#fff",
               borderRadius: 9999,
-              fontSize: 14,
+              fontSize: badgeSize,
               fontWeight: 600,
             }}
           >
@@ -54,9 +91,10 @@ export const ExportableOutfitCard = forwardRef<
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: `repeat(${Math.min(items.length, 4)}, 1fr)`,
-          gap: 16,
-          marginBottom: 32,
+          gridTemplateColumns: `repeat(${cols}, 1fr)`,
+          gap,
+          marginBottom: Math.round(16 * scale),
+          flexShrink: 0,
         }}
       >
         {items.map((item) => {
@@ -66,8 +104,8 @@ export const ExportableOutfitCard = forwardRef<
               key={item.id}
               style={{
                 background: "#fff",
-                borderRadius: 12,
-                padding: 12,
+                borderRadius: Math.round(10 * scale),
+                padding: productPad,
                 boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
               }}
             >
@@ -80,7 +118,7 @@ export const ExportableOutfitCard = forwardRef<
                     width: "100%",
                     aspectRatio: "1",
                     objectFit: "cover",
-                    borderRadius: 8,
+                    borderRadius: productRadius,
                     display: "block",
                   }}
                 />
@@ -90,12 +128,12 @@ export const ExportableOutfitCard = forwardRef<
                     width: "100%",
                     aspectRatio: "1",
                     background: "#f3f4f6",
-                    borderRadius: 8,
+                    borderRadius: productRadius,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     color: "#9ca3af",
-                    fontSize: 14,
+                    fontSize: bodySize,
                   }}
                 >
                   No image
@@ -103,8 +141,8 @@ export const ExportableOutfitCard = forwardRef<
               )}
               <p
                 style={{
-                  margin: "8px 0 2px",
-                  fontSize: 14,
+                  margin: `${Math.round(6 * scale)}px 0 ${Math.round(2 * scale)}px`,
+                  fontSize: captionSize,
                   fontWeight: 600,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
@@ -116,7 +154,7 @@ export const ExportableOutfitCard = forwardRef<
               <p
                 style={{
                   margin: 0,
-                  fontSize: 12,
+                  fontSize: Math.round(10 * scale),
                   color: "#6b7280",
                   textTransform: "capitalize",
                 }}
@@ -128,33 +166,38 @@ export const ExportableOutfitCard = forwardRef<
         })}
       </div>
 
-      {/* AI Content */}
+      {/* AI Content — takes remaining space */}
       <div
         style={{
           background: "#fff",
-          borderRadius: 16,
-          padding: 32,
+          borderRadius: Math.round(12 * scale),
+          padding: Math.round(20 * scale),
           boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+          flex: 1,
+          minHeight: 0,
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
         {content.description && (
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: Math.round(14 * scale) }}>
             <p
               style={{
-                fontSize: 12,
+                fontSize: labelSize,
                 fontWeight: 700,
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
                 color: "#7c3aed",
-                margin: "0 0 8px",
+                margin: `0 0 ${Math.round(6 * scale)}px`,
               }}
             >
               Description
             </p>
             <p
               style={{
-                fontSize: 16,
-                lineHeight: 1.6,
+                fontSize: bodySize,
+                lineHeight: 1.5,
                 margin: 0,
                 color: "#374151",
               }}
@@ -165,24 +208,34 @@ export const ExportableOutfitCard = forwardRef<
         )}
 
         {content.styling_tips && (
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: Math.round(14 * scale) }}>
             <p
               style={{
-                fontSize: 12,
+                fontSize: labelSize,
                 fontWeight: 700,
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
                 color: "#7c3aed",
-                margin: "0 0 8px",
+                margin: `0 0 ${Math.round(6 * scale)}px`,
               }}
             >
               Styling Tips
             </p>
-            <ul style={{ margin: 0, paddingLeft: 20, color: "#374151" }}>
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: Math.round(16 * scale),
+                color: "#374151",
+              }}
+            >
               {content.styling_tips.split("\n").map((tip, i) => (
                 <li
                   key={i}
-                  style={{ fontSize: 15, lineHeight: 1.6, marginBottom: 4 }}
+                  style={{
+                    fontSize: tipSize,
+                    lineHeight: 1.5,
+                    marginBottom: Math.round(2 * scale),
+                  }}
                 >
                   {tip}
                 </li>
@@ -195,27 +248,27 @@ export const ExportableOutfitCard = forwardRef<
           <div
             style={{
               background: "#f5f3ff",
-              borderRadius: 12,
-              padding: 20,
+              borderRadius: Math.round(10 * scale),
+              padding: Math.round(14 * scale),
             }}
           >
             <p
               style={{
-                fontSize: 12,
+                fontSize: labelSize,
                 fontWeight: 700,
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
                 color: "#7c3aed",
-                margin: "0 0 8px",
+                margin: `0 0 ${Math.round(6 * scale)}px`,
               }}
             >
               Instagram Caption
             </p>
             <p
               style={{
-                fontSize: 15,
+                fontSize: captionSize,
                 fontStyle: "italic",
-                lineHeight: 1.6,
+                lineHeight: 1.5,
                 margin: 0,
                 color: "#374151",
               }}
@@ -229,17 +282,20 @@ export const ExportableOutfitCard = forwardRef<
       {/* Branding */}
       <div
         style={{
-          marginTop: 32,
+          marginTop: Math.round(16 * scale),
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          gap: 8,
+          gap: Math.round(6 * scale),
+          flexShrink: 0,
         }}
       >
-        <span style={{ fontSize: 20, fontWeight: 700, color: "#7c3aed" }}>
+        <span
+          style={{ fontSize: brandSize, fontWeight: 700, color: "#7c3aed" }}
+        >
           Fashnix
         </span>
-        <span style={{ fontSize: 13, color: "#9ca3af" }}>
+        <span style={{ fontSize: brandSubSize, color: "#9ca3af" }}>
           AI-Powered Fashion Intelligence
         </span>
       </div>

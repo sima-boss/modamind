@@ -1,22 +1,33 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, OutfitWithDetails } from "@/lib/supabase/types";
 import { getProducts, getOutfits } from "@/lib/supabase/queries";
-import { matchOutfits } from "./matcher";
+import { comboKey, matchOutfits, type OutfitCandidate } from "./matcher";
 
 type Client = SupabaseClient<Database>;
+
+export interface GenerateOutfitsOptions {
+  /** How many outfits to attempt per theme. Defaults to 1. */
+  count?: number;
+  /** When provided, only these theme names are generated. */
+  selectedThemes?: string[];
+}
 
 /**
  * Replaces the current set of outfits with a fresh, diverse set.
  *
  * 1. Fetches all products with attributes
  * 2. Deletes existing outfits (CASCADE handles items + content)
- * 3. Runs the diversity-aware matcher
+ * 3. Runs the diversity-aware matcher, once per requested outfit-per-theme
  * 4. Saves the new outfits
  * 5. Returns the fresh set
  */
 export async function generateOutfits(
-  supabase: Client
+  supabase: Client,
+  options: GenerateOutfitsOptions = {}
 ): Promise<OutfitWithDetails[]> {
+  const count = Math.max(1, options.count ?? 1);
+  const { selectedThemes } = options;
+
   // 1. Fetch products with attributes
   const products = await getProducts(supabase);
 
@@ -37,8 +48,18 @@ export async function generateOutfits(
     if (delErr) throw delErr;
   }
 
-  // 3. Run matcher — no existingKeys needed since we just cleared everything
-  const candidates = matchOutfits(products);
+  // 3. Run the matcher `count` times per theme. Each run's picks are fed
+  //    back in as `existingKeys` so later runs don't repeat the same
+  //    exact combo — this is how we get multiple distinct outfits/theme.
+  const usedKeys = new Set<string>();
+  const candidates: OutfitCandidate[] = [];
+  for (let i = 0; i < count; i++) {
+    const batch = matchOutfits(products, usedKeys, selectedThemes);
+    for (const candidate of batch) {
+      usedKeys.add(comboKey(candidate.items.map((item) => item.product.id)));
+    }
+    candidates.push(...batch);
+  }
 
   if (candidates.length === 0) {
     throw new Error(

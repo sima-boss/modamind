@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import sharp from "sharp";
 
 const SYSTEM_PROMPT = `You are a fashion product analyst. Given a product image, return a JSON object with these exact fields:
 
@@ -16,6 +15,15 @@ const SYSTEM_PROMPT = `You are a fashion product analyst. Given a product image,
 
 Return ONLY valid JSON. No markdown, no explanation.`;
 
+// Claude's vision API only accepts these four image formats.
+const SUPPORTED_MEDIA_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+]);
+type SupportedMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+
 export async function POST(req: NextRequest) {
   try {
     const { imageUrl } = await req.json();
@@ -27,23 +35,59 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!process.env.ANTHROPIC_API_KEY) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
       return NextResponse.json(
         { error: "ANTHROPIC_API_KEY is not configured" },
         { status: 500 }
       );
     }
 
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+    // Fetch the image ourselves instead of handing Claude a bare URL. Product
+    // images are sometimes stored as AVIF (or another format the upload file
+    // picker allowed) — Claude's vision API rejects anything outside
+    // JPEG/PNG/GIF/WEBP with "The file format is invalid or unsupported", so
+    // normalize to PNG whenever the source format isn't one of those four.
+    const imageRes = await fetch(imageUrl);
+    if (!imageRes.ok) {
+      return NextResponse.json(
+        {
+          error: `Could not fetch the image (HTTP ${imageRes.status}). The image URL may be invalid or inaccessible.`,
+        },
+        { status: 502 }
+      );
+    }
+
+    const fetchedBuffer = Buffer.from(await imageRes.arrayBuffer());
+    const fetchedMediaType = imageRes.headers.get("content-type")?.split(";")[0];
+
+    let mediaType: SupportedMediaType;
+    let imageData: Buffer;
+    if (fetchedMediaType && SUPPORTED_MEDIA_TYPES.has(fetchedMediaType)) {
+      mediaType = fetchedMediaType as SupportedMediaType;
+      imageData = fetchedBuffer;
+    } else {
+      imageData = await sharp(fetchedBuffer).png().toBuffer();
+      mediaType = "image/png";
+    }
+
+    const client = new Anthropic({ apiKey });
+
+    const response = await client.messages.create({
+      model: "claude-sonnet-5",
       max_tokens: 512,
+      system: SYSTEM_PROMPT,
       messages: [
         {
           role: "user",
           content: [
             {
               type: "image",
-              source: { type: "url", url: imageUrl },
+              source: {
+                type: "base64",
+                media_type: mediaType,
+                data: imageData.toString("base64"),
+              },
             },
             {
               type: "text",
@@ -52,12 +96,10 @@ export async function POST(req: NextRequest) {
           ],
         },
       ],
-      system: SYSTEM_PROMPT,
     });
 
-    // Extract the text block from the response
-    const textBlock = message.content.find((b) => b.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
+    const textBlock = response.content.find((b) => b.type === "text");
+    if (!textBlock) {
       return NextResponse.json(
         { error: "No text response from AI" },
         { status: 502 }
@@ -71,8 +113,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ attributes });
   } catch (err: unknown) {
     console.error("[analyze]", err);
-    const message =
-      err instanceof Error ? err.message : "AI analysis failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+
+    let errorMessage = "AI analysis failed";
+    let status = 500;
+
+    if (err instanceof Anthropic.AuthenticationError) {
+      errorMessage = "API key is invalid or expired.";
+      status = err.status ?? 401;
+    } else if (err instanceof Anthropic.RateLimitError) {
+      errorMessage = "Rate limit reached. Please wait a moment and try again.";
+      status = err.status ?? 429;
+    } else if (err instanceof Anthropic.BadRequestError) {
+      errorMessage =
+        "Could not process image. The image may be corrupted or in an unsupported format.";
+      status = err.status ?? 400;
+    } else if (err instanceof Anthropic.APIError) {
+      errorMessage = err.message;
+      status = err.status ?? 500;
+    } else if (err instanceof Error) {
+      errorMessage = err.message;
+    }
+
+    return NextResponse.json({ error: errorMessage }, { status });
   }
 }

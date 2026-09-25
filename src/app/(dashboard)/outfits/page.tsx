@@ -1,16 +1,30 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, AlertCircle, Search, Shirt, Sparkles } from "lucide-react";
+import {
+  Loader2,
+  AlertCircle,
+  Search,
+  Shirt,
+  Sparkles,
+  Lightbulb,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { OutfitCard } from "@/components/outfits/OutfitCard";
 import { createClient } from "@/lib/supabase/client";
-import { getOutfits } from "@/lib/supabase/queries";
+import { getOutfits, getProducts } from "@/lib/supabase/queries";
 import { generateOutfits } from "@/lib/outfits/generate";
+import { THEME_NAMES } from "@/lib/outfits/matcher";
+import { analyzeProductGaps, type GapInsight } from "@/lib/outfits/gaps";
+import { cn } from "@/lib/utils";
 import type { OutfitWithDetails } from "@/lib/supabase/types";
+
+const MIN_COUNT = 1;
+const MAX_COUNT = 5;
 
 function matchesSearch(o: OutfitWithDetails, query: string): boolean {
   const q = query.toLowerCase();
@@ -27,6 +41,9 @@ export default function OutfitsPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [countPerTheme, setCountPerTheme] = useState(1);
+  const [selectedThemes, setSelectedThemes] = useState<string[]>(THEME_NAMES);
+  const [gapInsight, setGapInsight] = useState<GapInsight | null>(null);
 
   const fetchOutfits = useCallback(async () => {
     setLoading(true);
@@ -48,13 +65,30 @@ export default function OutfitsPage() {
     fetchOutfits();
   }, [fetchOutfits]);
 
+  function toggleTheme(name: string) {
+    setSelectedThemes((prev) =>
+      prev.includes(name) ? prev.filter((t) => t !== name) : [...prev, name]
+    );
+  }
+
   async function handleGenerate() {
+    if (selectedThemes.length === 0) {
+      setError("Select at least one theme to generate.");
+      return;
+    }
     setGenerating(true);
     setError(null);
     try {
       const supabase = createClient();
-      const data = await generateOutfits(supabase);
+      const data = await generateOutfits(supabase, {
+        count: countPerTheme,
+        selectedThemes,
+      });
       setOutfits(data);
+
+      // Analyze the catalog for category gaps now that generation is done.
+      const products = await getProducts(supabase);
+      setGapInsight(analyzeProductGaps(products));
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Failed to generate outfits";
@@ -71,21 +105,74 @@ export default function OutfitsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight">Outfits</h2>
+        <p className="text-muted-foreground">
+          Auto-generated outfit combinations from your catalog.
+        </p>
+      </div>
+
+      {/* Generation controls */}
+      <div className="space-y-4 rounded-xl border bg-card p-4 shadow-sm">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Outfits</h2>
-          <p className="text-muted-foreground">
-            Auto-generated outfit combinations from your catalog.
-          </p>
+          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Themes
+          </Label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {THEME_NAMES.map((name) => {
+              const active = selectedThemes.includes(name);
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => toggleTheme(name)}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    active
+                      ? "border-transparent bg-primary text-primary-foreground hover:bg-primary/90"
+                      : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  )}
+                  aria-pressed={active}
+                >
+                  {name}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <Button onClick={handleGenerate} disabled={generating}>
-          {generating ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Sparkles className="mr-2 h-4 w-4" />
-          )}
-          Generate Outfits
-        </Button>
+
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <Label
+              htmlFor="count-per-theme"
+              className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+            >
+              Outfits per theme
+            </Label>
+            <Input
+              id="count-per-theme"
+              type="number"
+              min={MIN_COUNT}
+              max={MAX_COUNT}
+              value={countPerTheme}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                if (Number.isNaN(n)) return;
+                setCountPerTheme(Math.min(MAX_COUNT, Math.max(MIN_COUNT, n)));
+              }}
+              className="mt-2 w-20"
+            />
+          </div>
+
+          <Button onClick={handleGenerate} disabled={generating}>
+            {generating ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-2 h-4 w-4" />
+            )}
+            Generate Outfits
+          </Button>
+        </div>
       </div>
 
       {/* Error */}
@@ -93,6 +180,14 @@ export default function OutfitsPage() {
         <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0" />
           {error}
+        </div>
+      )}
+
+      {/* Product gap insight */}
+      {gapInsight?.message && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+          <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{gapInsight.message}</span>
         </div>
       )}
 

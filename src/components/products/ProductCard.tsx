@@ -47,8 +47,11 @@ export function ProductCard({ product, onProductChanged }: ProductCardProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageUrl: product.image_url }),
       });
-      if (!res.ok) throw new Error("Analysis failed");
-      const { attributes } = await res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error ?? "Analysis failed");
+      }
+      const { attributes } = data;
       const supabase = createClient();
       await insertProductAttributes(supabase, {
         product_id: product.id,
@@ -62,8 +65,9 @@ export function ProductCard({ product, onProductChanged }: ProductCardProps) {
       });
       setAnalyzeMsg("Analysis complete!");
       onProductChanged();
-    } catch {
-      setAnalyzeMsg("Analysis failed. Try again later.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Analysis failed";
+      setAnalyzeMsg(msg);
     } finally {
       setAnalyzing(false);
     }
