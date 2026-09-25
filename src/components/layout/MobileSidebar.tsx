@@ -4,14 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Menu, LayoutDashboard, ShoppingBag, Shirt, Download, LogOut } from "lucide-react";
+import { Menu, LayoutDashboard, ShoppingBag, Shirt, Download, CreditCard, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { useLogout } from "@/lib/hooks/use-logout";
 
-const icons = { LayoutDashboard, ShoppingBag, Shirt, Download } as const;
+const icons = { LayoutDashboard, ShoppingBag, Shirt, Download, CreditCard } as const;
 type IconName = keyof typeof icons;
 
 interface SidebarLink {
@@ -25,6 +25,7 @@ const links: SidebarLink[] = [
   { title: "Products", href: "/products", icon: "ShoppingBag" },
   { title: "Outfits", href: "/outfits", icon: "Shirt" },
   { title: "Export", href: "/export", icon: "Download" },
+  { title: "Billing", href: "/billing", icon: "CreditCard" },
 ];
 
 export function MobileSidebar() {

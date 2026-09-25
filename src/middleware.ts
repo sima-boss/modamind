@@ -8,6 +8,7 @@ const PUBLIC_EXACT = ["/", "/login", "/signup", "/forgot-password", "/reset-pass
 const PUBLIC_PREFIXES = ["/lookbook/", "/auth/"];
 
 const AUTH_PAGES = ["/login", "/signup"];
+const ONBOARDING_PAGES = ["/choose-plan", "/checkout"];
 
 function isPublicPath(pathname: string) {
   return (
@@ -56,6 +57,27 @@ export async function middleware(request: NextRequest) {
     url.pathname = "/dashboard";
     url.search = "";
     return NextResponse.redirect(url);
+  }
+
+  if (user && !isPublicPath(pathname) && !AUTH_PAGES.includes(pathname)) {
+    const onOnboardingPage = ONBOARDING_PAGES.includes(pathname);
+    const { data: subscription } = await supabase
+      .from("subscriptions")
+      .select("id")
+      .maybeSingle();
+
+    if (!subscription && !onOnboardingPage) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/choose-plan";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+    if (subscription && onOnboardingPage) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/billing";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
   }
 
   return response;

@@ -218,9 +218,165 @@ export interface Database {
           },
         ];
       };
+      plans: {
+        Row: {
+          id: string;
+          name: string;
+          price_aed: number;
+          is_most_popular: boolean;
+          outfit_generations_limit: number | null;
+          products_limit: number | null;
+          ai_captions_limit: number | null;
+          languages: string[];
+          social_formats: string[] | null;
+          analytics_level: string;
+          export_formats: string[] | null;
+          has_brand_kit: boolean;
+          has_priority_generation: boolean;
+          team_members_limit: number;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          name: string;
+          price_aed: number;
+          is_most_popular?: boolean;
+          outfit_generations_limit?: number | null;
+          products_limit?: number | null;
+          ai_captions_limit?: number | null;
+          languages?: string[];
+          social_formats?: string[] | null;
+          analytics_level?: string;
+          export_formats?: string[] | null;
+          has_brand_kit?: boolean;
+          has_priority_generation?: boolean;
+          team_members_limit: number;
+          sort_order: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          price_aed?: number;
+          is_most_popular?: boolean;
+          outfit_generations_limit?: number | null;
+          products_limit?: number | null;
+          ai_captions_limit?: number | null;
+          languages?: string[];
+          social_formats?: string[] | null;
+          analytics_level?: string;
+          export_formats?: string[] | null;
+          has_brand_kit?: boolean;
+          has_priority_generation?: boolean;
+          team_members_limit?: number;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      subscriptions: {
+        Row: {
+          id: string;
+          user_id: string;
+          plan_id: string;
+          status: string;
+          current_period_start: string;
+          current_period_end: string;
+          pending_plan_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          plan_id: string;
+          status?: string;
+          current_period_start?: string;
+          current_period_end: string;
+          pending_plan_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          plan_id?: string;
+          status?: string;
+          current_period_start?: string;
+          current_period_end?: string;
+          pending_plan_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey";
+            columns: ["plan_id"];
+            isOneToOne: false;
+            referencedRelation: "plans";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "subscriptions_pending_plan_id_fkey";
+            columns: ["pending_plan_id"];
+            isOneToOne: false;
+            referencedRelation: "plans";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      billing_transactions: {
+        Row: {
+          id: string;
+          user_id: string;
+          type: string;
+          description: string;
+          amount_aed: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          type: string;
+          description: string;
+          amount_aed: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          type?: string;
+          description?: string;
+          amount_aed?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      checkout_subscription: {
+        Args: { p_user_id: string; p_plan_id: string };
+        Returns: Database["public"]["Tables"]["subscriptions"]["Row"];
+      };
+      upgrade_subscription: {
+        Args: { p_user_id: string; p_new_plan_id: string };
+        Returns: Database["public"]["Tables"]["subscriptions"]["Row"];
+      };
+      downgrade_subscription: {
+        Args: { p_user_id: string; p_new_plan_id: string };
+        Returns: Database["public"]["Tables"]["subscriptions"]["Row"];
+      };
+      cancel_pending_downgrade: {
+        Args: { p_user_id: string };
+        Returns: Database["public"]["Tables"]["subscriptions"]["Row"];
+      };
+      simulate_renewal: {
+        Args: { p_user_id: string };
+        Returns: Database["public"]["Tables"]["subscriptions"]["Row"];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
@@ -236,6 +392,15 @@ export type OutfitItem = Database["public"]["Tables"]["outfit_items"]["Row"];
 export type OutfitContent =
   Database["public"]["Tables"]["outfit_content"]["Row"];
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+export type Plan = Database["public"]["Tables"]["plans"]["Row"];
+export type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
+export type BillingTransaction =
+  Database["public"]["Tables"]["billing_transactions"]["Row"];
+
+export type SubscriptionWithPlan = Subscription & {
+  plan: Plan;
+  pendingPlan: Plan | null;
+};
 
 export type ProductWithAttributes = Product & {
   product_attributes: ProductAttributes[];

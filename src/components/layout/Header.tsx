@@ -1,19 +1,26 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Bell, LogOut, Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useSession } from "@/components/providers/AuthProvider";
 import { useLogout } from "@/lib/hooks/use-logout";
 import { MobileSidebar } from "@/components/layout/MobileSidebar";
+import { createClient } from "@/lib/supabase/client";
+import { getCurrentSubscription } from "@/lib/supabase/queries";
+import type { SubscriptionWithPlan } from "@/lib/supabase/types";
+import { SUBSCRIPTION_CHANGED_EVENT } from "@/lib/events";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/products": "Products",
   "/outfits": "Outfits",
   "/export": "Export",
+  "/billing": "Billing",
 };
 
 export function Header() {
@@ -21,6 +28,19 @@ export function Header() {
   const title = pageTitles[pathname] ?? "Fashnix";
   const { user } = useSession();
   const { logout, loggingOut } = useLogout();
+  const [subscription, setSubscription] = useState<SubscriptionWithPlan | null>(null);
+
+  useEffect(() => {
+    function loadSubscription() {
+      getCurrentSubscription(createClient())
+        .then(setSubscription)
+        .catch(() => setSubscription(null));
+    }
+    loadSubscription();
+    window.addEventListener(SUBSCRIPTION_CHANGED_EVENT, loadSubscription);
+    return () =>
+      window.removeEventListener(SUBSCRIPTION_CHANGED_EVENT, loadSubscription);
+  }, []);
 
   const fullName = (user?.user_metadata?.full_name as string | undefined) ?? "";
   const initials =
@@ -55,6 +75,9 @@ export function Header() {
         </Button>
 
         <div className="flex items-center gap-2 pl-1">
+          {subscription && (
+            <Badge variant="secondary">{subscription.plan.name}</Badge>
+          )}
           <Avatar className="h-8 w-8">
             <AvatarFallback className="text-xs font-medium">
               {initials}

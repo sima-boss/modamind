@@ -7,6 +7,9 @@ import type {
   ProductWithAttributes,
   OutfitContent,
   OutfitWithDetails,
+  Plan,
+  BillingTransaction,
+  SubscriptionWithPlan,
 } from "./types";
 
 type Client = SupabaseClient<Database>;
@@ -127,4 +130,48 @@ export async function getOutfitById(supabase: Client, id: string) {
 
   if (error) throw error;
   return data as OutfitWithDetails;
+}
+
+// ── Billing ─────────────────────────────────────────────────
+
+export async function getPlans(supabase: Client) {
+  const { data, error } = await supabase
+    .from("plans")
+    .select("*")
+    .order("sort_order", { ascending: true });
+
+  if (error) throw error;
+  return data as Plan[];
+}
+
+export async function getCurrentSubscription(
+  supabase: Client
+): Promise<SubscriptionWithPlan | null> {
+  const { data: sub, error } = await supabase
+    .from("subscriptions")
+    .select("*")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!sub) return null;
+
+  // Only 3 plan rows total — joining client-side avoids the multi-FK
+  // PostgREST embed-hint footgun (subscriptions has two FKs into plans).
+  const plans = await getPlans(supabase);
+  const plan = plans.find((p) => p.id === sub.plan_id)!;
+  const pendingPlan = sub.pending_plan_id
+    ? (plans.find((p) => p.id === sub.pending_plan_id) ?? null)
+    : null;
+
+  return { ...sub, plan, pendingPlan };
+}
+
+export async function getBillingTransactions(supabase: Client) {
+  const { data, error } = await supabase
+    .from("billing_transactions")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data as BillingTransaction[];
 }

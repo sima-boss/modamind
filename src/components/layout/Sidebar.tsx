@@ -7,6 +7,7 @@ import {
   ShoppingBag,
   Shirt,
   Download,
+  CreditCard,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ const icons = {
   ShoppingBag,
   Shirt,
   Download,
+  CreditCard,
 } as const;
 
 type IconName = keyof typeof icons;
@@ -33,6 +35,7 @@ const links: SidebarLink[] = [
   { title: "Products", href: "/products", icon: "ShoppingBag" },
   { title: "Outfits", href: "/outfits", icon: "Shirt" },
   { title: "Export", href: "/export", icon: "Download" },
+  { title: "Billing", href: "/billing", icon: "CreditCard" },
 ];
 
 export function Sidebar() {
