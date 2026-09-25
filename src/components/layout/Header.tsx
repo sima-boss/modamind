@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSession } from "@/components/providers/AuthProvider";
 import { useLogout } from "@/lib/hooks/use-logout";
 import { MobileSidebar } from "@/components/layout/MobileSidebar";
@@ -76,23 +77,30 @@ export function Header() {
         </Button>
 
         <div className="flex items-center gap-2 pl-1">
-          {subscription && (
-            <div className="hidden flex-col items-end sm:flex">
-              <Badge variant="secondary">{subscription.plan.name}</Badge>
-              <span className="mt-0.5 text-[11px] text-muted-foreground">
-                {(() => {
-                  const { remaining, isUnlimited } = getRemaining(
-                    subscription.plan,
-                    subscription,
-                    "outfit_generation"
-                  );
-                  return isUnlimited
-                    ? "Unlimited outfits"
-                    : `${remaining} outfits left`;
-                })()}
-              </span>
-            </div>
-          )}
+          {subscription &&
+            (() => {
+              const { planRemaining, extraCredits, totalAvailable, isUnlimited } =
+                getRemaining(subscription.plan, subscription, "outfit_generation");
+              return (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="hidden flex-col items-end sm:flex">
+                      <Badge variant="secondary">{subscription.plan.name}</Badge>
+                      <span className="mt-0.5 text-[11px] text-muted-foreground">
+                        {isUnlimited
+                          ? "Unlimited outfits"
+                          : `${totalAvailable} outfits left`}
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isUnlimited
+                      ? "Unlimited outfit generations on this plan"
+                      : `Plan: ${planRemaining} remaining · Extra credits: ${extraCredits}`}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })()}
           <Avatar className="h-8 w-8">
             <AvatarFallback className="text-xs font-medium">
               {initials}

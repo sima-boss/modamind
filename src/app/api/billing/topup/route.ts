@@ -21,9 +21,9 @@ export async function POST(req: NextRequest) {
   const pkg = TOPUP_PACKAGES.find((p) => p.id === parsed.data.package)!;
 
   const service = createServiceRoleClient();
-  const { data, error } = await service.rpc("add_outfit_topup", {
+  const { data, error } = await service.rpc("add_extra_credits", {
     p_user_id: user.id,
-    p_outfits: pkg.outfits,
+    p_credits: pkg.credits,
     p_amount_aed: pkg.amount_aed,
   });
 

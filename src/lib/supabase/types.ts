@@ -286,7 +286,7 @@ export interface Database {
           pending_plan_id: string | null;
           outfit_generations_used: number;
           ai_captions_used: number;
-          outfit_topup_balance: number;
+          extra_credits_balance: number;
           created_at: string;
           updated_at: string;
         };
@@ -300,7 +300,7 @@ export interface Database {
           pending_plan_id?: string | null;
           outfit_generations_used?: number;
           ai_captions_used?: number;
-          outfit_topup_balance?: number;
+          extra_credits_balance?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -314,7 +314,7 @@ export interface Database {
           pending_plan_id?: string | null;
           outfit_generations_used?: number;
           ai_captions_used?: number;
-          outfit_topup_balance?: number;
+          extra_credits_balance?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -342,6 +342,7 @@ export interface Database {
           type: string;
           description: string;
           amount_aed: number;
+          credits: number | null;
           created_at: string;
         };
         Insert: {
@@ -350,6 +351,7 @@ export interface Database {
           type: string;
           description: string;
           amount_aed: number;
+          credits?: number | null;
           created_at?: string;
         };
         Update: {
@@ -358,6 +360,7 @@ export interface Database {
           type?: string;
           description?: string;
           amount_aed?: number;
+          credits?: number | null;
           created_at?: string;
         };
         Relationships: [];
@@ -408,19 +411,19 @@ export interface Database {
       };
       consume_usage_credits: {
         Args: { p_user_id: string; p_type: string; p_count: number };
-        Returns: { from_monthly: number; from_topup: number }[];
+        Returns: { from_monthly: number; from_extra: number }[];
       };
       refund_usage_credits: {
         Args: {
           p_user_id: string;
           p_type: string;
           p_from_monthly: number;
-          p_from_topup: number;
+          p_from_extra: number;
         };
         Returns: undefined;
       };
-      add_outfit_topup: {
-        Args: { p_user_id: string; p_outfits: number; p_amount_aed: number };
+      add_extra_credits: {
+        Args: { p_user_id: string; p_credits: number; p_amount_aed: number };
         Returns: Database["public"]["Tables"]["subscriptions"]["Row"];
       };
       debug_set_usage_near_limit: {

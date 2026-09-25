@@ -5,13 +5,15 @@ export type UsageType = "outfit_generation" | "ai_caption";
 export interface UsageRemaining {
   used: number;
   limit: number | null;
-  /** Monthly allowance remaining, plus any top-up balance (outfits only). */
-  remaining: number | null;
-  /** 0-100, or null when unlimited. */
+  /** Monthly allowance remaining, floored at 0. Null when unlimited. */
+  planRemaining: number | null;
+  /** used/limit, capped at 100. Plan allowance only — never includes extra credits. */
   percent: number | null;
   isUnlimited: boolean;
-  /** Only meaningful for outfit generations. */
-  topupBalance: number;
+  /** Shared extra-credits wallet balance (same value for both usage types). */
+  extraCredits: number;
+  /** planRemaining + extraCredits. Null when unlimited. */
+  totalAvailable: number | null;
 }
 
 export function getRemaining(
@@ -24,21 +26,30 @@ export function getRemaining(
   const used = isOutfit
     ? subscription.outfit_generations_used
     : subscription.ai_captions_used;
-  const topupBalance = isOutfit ? subscription.outfit_topup_balance : 0;
+  const extraCredits = subscription.extra_credits_balance;
 
   if (limit === null) {
     return {
       used,
       limit: null,
-      remaining: null,
+      planRemaining: null,
       percent: null,
       isUnlimited: true,
-      topupBalance,
+      extraCredits,
+      totalAvailable: null,
     };
   }
 
-  const remaining = Math.max(limit - used, 0) + topupBalance;
+  const planRemaining = Math.max(limit - used, 0);
   const percent = Math.min(Math.round((used / limit) * 100), 100);
 
-  return { used, limit, remaining, percent, isUnlimited: false, topupBalance };
+  return {
+    used,
+    limit,
+    planRemaining,
+    percent,
+    isUnlimited: false,
+    extraCredits,
+    totalAvailable: planRemaining + extraCredits,
+  };
 }

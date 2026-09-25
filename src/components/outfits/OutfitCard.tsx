@@ -30,6 +30,7 @@ import {
   getExportFormat,
 } from "@/lib/outfits/export-formats";
 import { ExportableOutfitCard } from "./ExportableOutfitCard";
+import { TopUpModal } from "@/components/billing/TopUpModal";
 import { SUBSCRIPTION_CHANGED_EVENT } from "@/lib/events";
 
 interface OutfitCardProps {
@@ -48,6 +49,7 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
   const [showMoodBoard, setShowMoodBoard] = useState(false);
   const [copied, setCopied] = useState(false);
   const [formatId, setFormatId] = useState(DEFAULT_EXPORT_FORMAT.id);
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
 
   async function handleGenerateContent() {
@@ -83,9 +85,10 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         if (res.status === 403) {
+          setShowTopUpModal(true);
           throw new Error(
             body.error ??
-              "You've used all your AI captions for this period. Upgrade your plan for more."
+              "You've used all your AI captions for this period."
           );
         }
         throw new Error("Content generation failed");
@@ -515,6 +518,8 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
         />
       </div>
     )}
+
+    <TopUpModal open={showTopUpModal} onOpenChange={setShowTopUpModal} />
     </>
   );
 }

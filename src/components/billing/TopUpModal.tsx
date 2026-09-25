@@ -51,9 +51,10 @@ export function TopUpModal({ open, onOpenChange, onPurchased }: TopUpModalProps)
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Buy more outfits</DialogTitle>
+          <DialogTitle>Buy extra credits</DialogTitle>
           <DialogDescription>
-            Top-up credits never expire and are used after your monthly
+            Extra credits are usable for outfit generations or AI captions
+            (1 credit each), never expire, and are used after your monthly
             allowance runs out. DEMO MODE — no real payment will be taken.
           </DialogDescription>
         </DialogHeader>
@@ -65,7 +66,7 @@ export function TopUpModal({ open, onOpenChange, onPurchased }: TopUpModalProps)
               className="flex items-center justify-between rounded-lg border px-4 py-3"
             >
               <div>
-                <p className="font-medium">{pkg.outfits} outfits</p>
+                <p className="font-medium">{pkg.credits} credits</p>
                 <p className="text-sm text-muted-foreground">
                   {formatAED(pkg.amount_aed)}
                 </p>

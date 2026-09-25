@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, RefreshCw, ShoppingBag, Wrench } from "lucide-react";
+import { Coins, Loader2, RefreshCw, ShoppingBag, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -105,6 +105,10 @@ export default function BillingPage() {
     );
   }
 
+  const totalCreditsPurchased = transactions
+    .filter((t) => t.type === "top-up" && t.credits != null)
+    .reduce((sum, t) => sum + (t.credits ?? 0), 0);
+
   const hasPending = !!subscription.pendingPlan;
   const isUpgrade = dialogPlan
     ? dialogPlan.price_aed > subscription.plan.price_aed
@@ -162,14 +166,6 @@ export default function BillingPage() {
           </div>
 
           <div className="flex flex-col items-end gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowTopUpModal(true)}
-            >
-              <ShoppingBag className="mr-2 h-4 w-4" />
-              Buy more credits
-            </Button>
             <div className="space-y-1 text-right">
               <Button
                 variant="outline"
@@ -187,6 +183,30 @@ export default function BillingPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Extra credits wallet */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card p-6 shadow-sm">
+        <div className="flex items-center gap-3">
+          <Coins className="h-5 w-5 text-muted-foreground" />
+          <div>
+            <p className="text-sm text-muted-foreground">Extra credits</p>
+            <p className="text-xl font-semibold">
+              {subscription.extra_credits_balance.toLocaleString()}{" "}
+              <span className="text-sm font-normal text-muted-foreground">
+                available · {totalCreditsPurchased.toLocaleString()} total bought
+              </span>
+            </p>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowTopUpModal(true)}
+        >
+          <ShoppingBag className="mr-2 h-4 w-4" />
+          Buy more credits
+        </Button>
       </div>
 
       {/* Plan comparison */}
@@ -261,6 +281,9 @@ export default function BillingPage() {
                     {formatDate(t.created_at)}
                   </p>
                 </div>
+                {t.type === "top-up" && t.credits != null && (
+                  <Badge variant="secondary">+{t.credits} credits</Badge>
+                )}
                 <Badge variant="outline" className="capitalize">
                   {t.type}
                 </Badge>

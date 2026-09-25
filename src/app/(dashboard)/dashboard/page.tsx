@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  Coins,
   Download,
   FileText,
   Loader2,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { TopUpModal } from "@/components/billing/TopUpModal";
 import { createClient } from "@/lib/supabase/client";
 import {
   getProducts,
@@ -42,22 +44,23 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString();
 }
 
-function UsageRow({
+/** Shared bar renderer for any "used / limit" metric (plan allowance or
+ * total products) — amber at >=80%, hidden entirely when unlimited. */
+function LimitBar({
   label,
-  plan,
-  subscription,
-  type,
+  used,
+  limit,
+  unlimitedLabel = "Unlimited",
 }: {
   label: string;
-  plan: SubscriptionWithPlan["plan"];
-  subscription: SubscriptionWithPlan;
-  type: UsageType;
+  used: number;
+  limit: number | null;
+  unlimitedLabel?: string;
 }) {
-  const { used, limit, percent, isUnlimited } = getRemaining(
-    plan,
-    subscription,
-    type
-  );
+  const isUnlimited = limit === null;
+  const percent = isUnlimited
+    ? null
+    : Math.min(Math.round((used / limit) * 100), 100);
   const warning = percent !== null && percent >= 80;
 
   return (
@@ -65,7 +68,9 @@ function UsageRow({
       <div className="mb-1.5 flex items-center justify-between text-sm">
         <span className="text-muted-foreground">{label}</span>
         <span className="font-medium">
-          {isUnlimited ? "Unlimited" : `${used.toLocaleString()} / ${limit!.toLocaleString()}`}
+          {isUnlimited
+            ? unlimitedLabel
+            : `${used.toLocaleString()} / ${limit.toLocaleString()}`}
         </span>
       </div>
       {!isUnlimited && (
@@ -83,6 +88,32 @@ function UsageRow({
   );
 }
 
+function UsageRow({
+  label,
+  plan,
+  subscription,
+  type,
+}: {
+  label: string;
+  plan: SubscriptionWithPlan["plan"];
+  subscription: SubscriptionWithPlan;
+  type: UsageType;
+}) {
+  const { used, limit, isUnlimited, planRemaining, extraCredits, totalAvailable } =
+    getRemaining(plan, subscription, type);
+
+  return (
+    <div>
+      <LimitBar label={label} used={used} limit={limit} />
+      <p className="mt-1.5 text-xs text-muted-foreground">
+        {isUnlimited
+          ? "Unlimited this month"
+          : `Total available: ${totalAvailable!.toLocaleString()} (${planRemaining!.toLocaleString()} plan + ${extraCredits.toLocaleString()} extra)`}
+      </p>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [products, setProducts] = useState<ProductWithAttributes[]>([]);
   const [outfits, setOutfits] = useState<OutfitWithDetails[]>([]);
@@ -90,6 +121,7 @@ export default function DashboardPage() {
     null
   );
   const [loading, setLoading] = useState(true);
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -187,8 +219,38 @@ export default function DashboardPage() {
               type="ai_caption"
             />
           </div>
+
+          <div className="mt-5 flex items-center justify-between gap-3 border-t pt-4">
+            <div className="flex items-center gap-2 text-sm">
+              <Coins className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">
+                Extra credits: {subscription.extra_credits_balance.toLocaleString()} left
+              </span>
+              <span className="text-xs text-muted-foreground">
+                (usable for outfits or captions)
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTopUpModal(true)}
+            >
+              Buy more
+            </Button>
+          </div>
+
+          <div className="mt-5 border-t pt-4">
+            <LimitBar
+              label="Products"
+              used={products.length}
+              limit={subscription.plan.products_limit}
+              unlimitedLabel="Unlimited"
+            />
+          </div>
         </div>
       )}
+
+      <TopUpModal open={showTopUpModal} onOpenChange={setShowTopUpModal} />
 
       {/* Recent Activity + Quick Actions */}
       <div className="grid gap-4 lg:grid-cols-2">

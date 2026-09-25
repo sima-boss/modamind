@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: consumeErr.message }, { status: 400 });
   }
 
-  const { from_topup } = consumed[0];
+  const { from_extra } = consumed[0];
 
   let outfits: Awaited<ReturnType<typeof generateOutfits>> = [];
   let generateError: string | null = null;
@@ -45,13 +45,13 @@ export async function POST(req: NextRequest) {
 
   const shortfall = requestedMax - outfits.length;
   if (shortfall > 0) {
-    const refundTopup = Math.min(shortfall, from_topup);
-    const refundMonthly = shortfall - refundTopup;
+    const refundExtra = Math.min(shortfall, from_extra);
+    const refundMonthly = shortfall - refundExtra;
     await service.rpc("refund_usage_credits", {
       p_user_id: user.id,
       p_type: "outfit_generation",
       p_from_monthly: refundMonthly,
-      p_from_topup: refundTopup,
+      p_from_extra: refundExtra,
     });
   }
 

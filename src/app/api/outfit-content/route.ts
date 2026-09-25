@@ -60,13 +60,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: consumeErr.message }, { status: 400 });
   }
 
-  const { from_monthly, from_topup } = consumed[0];
+  const { from_monthly, from_extra } = consumed[0];
   async function refund() {
     await service.rpc("refund_usage_credits", {
       p_user_id: userId,
       p_type: "ai_caption",
       p_from_monthly: from_monthly,
-      p_from_topup: from_topup,
+      p_from_extra: from_extra,
     });
   }
 

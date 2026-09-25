@@ -81,7 +81,7 @@ export default function OutfitsPage() {
 
   const outfitsRemaining = subscription
     ? getRemaining(subscription.plan, subscription, "outfit_generation")
-        .remaining
+        .totalAvailable
     : null;
   const outOfCredits = outfitsRemaining !== null && outfitsRemaining <= 0;
 
