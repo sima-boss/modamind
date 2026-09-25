@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, ShoppingBag, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +12,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PlanCard } from "@/components/billing/PlanCard";
+import { TopUpModal } from "@/components/billing/TopUpModal";
 import { formatAED, formatDate } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -46,7 +48,9 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [dialogPlan, setDialogPlan] = useState<Plan | null>(null);
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
 
   const fetchData = useCallback(async () => {
     const supabase = createClient();
@@ -65,14 +69,19 @@ export default function BillingPage() {
     fetchData();
   }, [fetchData]);
 
-  async function runAction(fn: () => Promise<void>) {
+  async function runAction(fn: () => Promise<void>, successMsg?: string) {
     setActionLoading(true);
     setError(null);
+    setSuccessMessage(null);
     try {
       await fn();
       await fetchData();
       setDialogPlan(null);
       window.dispatchEvent(new Event(SUBSCRIPTION_CHANGED_EVENT));
+      if (successMsg) {
+        setSuccessMessage(successMsg);
+        setTimeout(() => setSuccessMessage(null), 4000);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -112,6 +121,11 @@ export default function BillingPage() {
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
+      {successMessage && (
+        <p className="rounded-md bg-secondary px-3 py-2 text-sm text-secondary-foreground">
+          {successMessage}
+        </p>
+      )}
 
       {/* Current plan */}
       <div className="rounded-xl border bg-card p-6 shadow-sm">
@@ -124,35 +138,53 @@ export default function BillingPage() {
               {formatDate(subscription.current_period_end)}
             </p>
             {hasPending && subscription.pendingPlan && (
-              <p className="mt-2 text-sm">
-                Your plan will change to{" "}
-                <strong>{subscription.pendingPlan.name}</strong> on{" "}
-                {formatDate(subscription.current_period_end)}.{" "}
-                <button
-                  className="font-medium text-primary underline-offset-4 hover:underline disabled:opacity-50"
+              <div className="mt-3 space-y-2">
+                <p className="text-sm">
+                  Your plan will change to{" "}
+                  <strong>{subscription.pendingPlan.name}</strong> on{" "}
+                  {formatDate(subscription.current_period_end)}.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
                   disabled={actionLoading}
-                  onClick={() => runAction(() => postBilling("cancel-downgrade"))}
+                  onClick={() =>
+                    runAction(
+                      () => postBilling("cancel-downgrade"),
+                      "Scheduled change canceled"
+                    )
+                  }
                 >
                   Cancel scheduled change
-                </button>
-              </p>
+                </Button>
+              </div>
             )}
           </div>
 
-          <div className="space-y-1 text-right">
+          <div className="flex flex-col items-end gap-2">
             <Button
               variant="outline"
               size="sm"
-              disabled={actionLoading}
-              onClick={() => runAction(() => postBilling("simulate-renewal"))}
+              onClick={() => setShowTopUpModal(true)}
             >
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Simulate renewal (Demo)
+              <ShoppingBag className="mr-2 h-4 w-4" />
+              Buy more credits
             </Button>
-            <p className="max-w-[220px] text-xs text-muted-foreground">
-              Demo only — normally happens automatically when the billing
-              period ends.
-            </p>
+            <div className="space-y-1 text-right">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={actionLoading}
+                onClick={() => runAction(() => postBilling("simulate-renewal"))}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Simulate renewal (Demo)
+              </Button>
+              <p className="max-w-[220px] text-xs text-muted-foreground">
+                Demo only — normally happens automatically when the billing
+                period ends.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -163,6 +195,7 @@ export default function BillingPage() {
         <div className="grid gap-6 md:grid-cols-3">
           {plans.map((plan) => {
             const isCurrent = plan.id === subscription.plan.id;
+            const isPendingTarget = plan.id === subscription.pendingPlan?.id;
             const pricier = plan.price_aed > subscription.plan.price_aed;
 
             let action: React.ReactNode;
@@ -172,8 +205,12 @@ export default function BillingPage() {
                   Current plan
                 </Badge>
               );
-            } else {
+            } else if (isPendingTarget) {
               action = (
+                <Badge className="w-full justify-center py-1.5">Scheduled</Badge>
+              );
+            } else {
+              const button = (
                 <Button
                   variant={pricier ? "default" : "outline"}
                   className="w-full"
@@ -182,6 +219,18 @@ export default function BillingPage() {
                 >
                   {pricier ? "Upgrade" : "Downgrade"}
                 </Button>
+              );
+              action = hasPending ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span tabIndex={0} className="block w-full">
+                      {button}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Cancel the scheduled change first</TooltipContent>
+                </Tooltip>
+              ) : (
+                button
               );
             }
 
@@ -224,6 +273,29 @@ export default function BillingPage() {
         )}
       </div>
 
+      {/* Demo tools */}
+      <div className="rounded-xl border border-dashed bg-muted/30 p-5">
+        <div className="mb-1 flex items-center gap-2">
+          <Wrench className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold text-muted-foreground">
+            Demo tools
+          </h3>
+        </div>
+        <p className="mb-3 text-xs text-muted-foreground">
+          For testing this project only — not part of the real product.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={actionLoading}
+          onClick={() =>
+            runAction(() => postBilling("debug-set-usage-near-limit"))
+          }
+        >
+          Set my usage near the limit
+        </Button>
+      </div>
+
       <Dialog open={!!dialogPlan} onOpenChange={(open) => !open && setDialogPlan(null)}>
         <DialogContent>
           <DialogHeader>
@@ -254,10 +326,12 @@ export default function BillingPage() {
               disabled={actionLoading}
               onClick={() =>
                 dialogPlan &&
-                runAction(() =>
-                  postBilling(isUpgrade ? "upgrade" : "downgrade", {
-                    plan_id: dialogPlan.id,
-                  })
+                runAction(
+                  () =>
+                    postBilling(isUpgrade ? "upgrade" : "downgrade", {
+                      plan_id: dialogPlan.id,
+                    }),
+                  isUpgrade ? undefined : "Downgrade scheduled"
                 )
               }
             >
@@ -267,6 +341,12 @@ export default function BillingPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TopUpModal
+        open={showTopUpModal}
+        onOpenChange={setShowTopUpModal}
+        onPurchased={fetchData}
+      />
     </div>
   );
 }

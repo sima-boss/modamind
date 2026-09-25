@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getCurrentSubscription } from "@/lib/supabase/queries";
 import type { SubscriptionWithPlan } from "@/lib/supabase/types";
 import { SUBSCRIPTION_CHANGED_EVENT } from "@/lib/events";
+import { getRemaining } from "@/lib/usage";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -76,7 +77,21 @@ export function Header() {
 
         <div className="flex items-center gap-2 pl-1">
           {subscription && (
-            <Badge variant="secondary">{subscription.plan.name}</Badge>
+            <div className="hidden flex-col items-end sm:flex">
+              <Badge variant="secondary">{subscription.plan.name}</Badge>
+              <span className="mt-0.5 text-[11px] text-muted-foreground">
+                {(() => {
+                  const { remaining, isUnlimited } = getRemaining(
+                    subscription.plan,
+                    subscription,
+                    "outfit_generation"
+                  );
+                  return isUnlimited
+                    ? "Unlimited outfits"
+                    : `${remaining} outfits left`;
+                })()}
+              </span>
+            </div>
           )}
           <Avatar className="h-8 w-8">
             <AvatarFallback className="text-xs font-medium">

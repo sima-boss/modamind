@@ -15,10 +15,17 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-import { getProducts, getOutfits } from "@/lib/supabase/queries";
+import {
+  getProducts,
+  getOutfits,
+  getCurrentSubscription,
+} from "@/lib/supabase/queries";
+import { getRemaining, type UsageType } from "@/lib/usage";
+import { cn } from "@/lib/utils";
 import type {
   ProductWithAttributes,
   OutfitWithDetails,
+  SubscriptionWithPlan,
 } from "@/lib/supabase/types";
 
 function timeAgo(dateStr: string): string {
@@ -35,21 +42,67 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString();
 }
 
+function UsageRow({
+  label,
+  plan,
+  subscription,
+  type,
+}: {
+  label: string;
+  plan: SubscriptionWithPlan["plan"];
+  subscription: SubscriptionWithPlan;
+  type: UsageType;
+}) {
+  const { used, limit, percent, isUnlimited } = getRemaining(
+    plan,
+    subscription,
+    type
+  );
+  const warning = percent !== null && percent >= 80;
+
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between text-sm">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-medium">
+          {isUnlimited ? "Unlimited" : `${used.toLocaleString()} / ${limit!.toLocaleString()}`}
+        </span>
+      </div>
+      {!isUnlimited && (
+        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all",
+              warning ? "bg-amber-500" : "bg-primary"
+            )}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [products, setProducts] = useState<ProductWithAttributes[]>([]);
   const [outfits, setOutfits] = useState<OutfitWithDetails[]>([]);
+  const [subscription, setSubscription] = useState<SubscriptionWithPlan | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const supabase = createClient();
-      const [prods, fits] = await Promise.all([
+      const [prods, fits, sub] = await Promise.all([
         getProducts(supabase),
         getOutfits(supabase),
+        getCurrentSubscription(supabase),
       ]);
       setProducts(prods);
       setOutfits(fits);
+      setSubscription(sub);
     } catch (err) {
       console.error("Dashboard fetch failed:", err);
     } finally {
@@ -115,6 +168,27 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Usage this period */}
+      {subscription && (
+        <div className="rounded-xl border bg-card p-5 shadow-sm">
+          <h3 className="mb-4 font-semibold">Usage this period</h3>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <UsageRow
+              label="Outfit generations"
+              plan={subscription.plan}
+              subscription={subscription}
+              type="outfit_generation"
+            />
+            <UsageRow
+              label="AI captions"
+              plan={subscription.plan}
+              subscription={subscription}
+              type="ai_caption"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Recent Activity + Quick Actions */}
       <div className="grid gap-4 lg:grid-cols-2">

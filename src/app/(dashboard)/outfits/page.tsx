@@ -15,13 +15,19 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OutfitCard } from "@/components/outfits/OutfitCard";
+import { TopUpModal } from "@/components/billing/TopUpModal";
 import { createClient } from "@/lib/supabase/client";
-import { getOutfits, getProducts } from "@/lib/supabase/queries";
-import { generateOutfits } from "@/lib/outfits/generate";
+import {
+  getCurrentSubscription,
+  getOutfits,
+  getProducts,
+} from "@/lib/supabase/queries";
 import { THEME_NAMES } from "@/lib/outfits/matcher";
 import { analyzeProductGaps, type GapInsight } from "@/lib/outfits/gaps";
 import { cn } from "@/lib/utils";
-import type { OutfitWithDetails } from "@/lib/supabase/types";
+import { getRemaining } from "@/lib/usage";
+import { SUBSCRIPTION_CHANGED_EVENT } from "@/lib/events";
+import type { OutfitWithDetails, SubscriptionWithPlan } from "@/lib/supabase/types";
 
 const MIN_COUNT = 1;
 const MAX_COUNT = 5;
@@ -44,14 +50,22 @@ export default function OutfitsPage() {
   const [countPerTheme, setCountPerTheme] = useState(1);
   const [selectedThemes, setSelectedThemes] = useState<string[]>(THEME_NAMES);
   const [gapInsight, setGapInsight] = useState<GapInsight | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionWithPlan | null>(
+    null
+  );
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
 
   const fetchOutfits = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const supabase = createClient();
-      const data = await getOutfits(supabase);
+      const [data, sub] = await Promise.all([
+        getOutfits(supabase),
+        getCurrentSubscription(supabase),
+      ]);
       setOutfits(data);
+      setSubscription(sub);
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Failed to load outfits";
@@ -65,6 +79,12 @@ export default function OutfitsPage() {
     fetchOutfits();
   }, [fetchOutfits]);
 
+  const outfitsRemaining = subscription
+    ? getRemaining(subscription.plan, subscription, "outfit_generation")
+        .remaining
+    : null;
+  const outOfCredits = outfitsRemaining !== null && outfitsRemaining <= 0;
+
   function toggleTheme(name: string) {
     setSelectedThemes((prev) =>
       prev.includes(name) ? prev.filter((t) => t !== name) : [...prev, name]
@@ -76,18 +96,32 @@ export default function OutfitsPage() {
       setError("Select at least one theme to generate.");
       return;
     }
+    if (outOfCredits) {
+      setShowTopUpModal(true);
+      return;
+    }
     setGenerating(true);
     setError(null);
     try {
-      const supabase = createClient();
-      const data = await generateOutfits(supabase, {
-        count: countPerTheme,
-        selectedThemes,
+      const res = await fetch("/api/outfits/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: countPerTheme, selectedThemes }),
       });
-      setOutfits(data);
 
-      // Analyze the catalog for category gaps now that generation is done.
-      const products = await getProducts(supabase);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (body.error === "limit_reached") {
+          setShowTopUpModal(true);
+          return;
+        }
+        throw new Error(body.error ?? "Failed to generate outfits");
+      }
+
+      window.dispatchEvent(new Event(SUBSCRIPTION_CHANGED_EVENT));
+
+      await fetchOutfits();
+      const products = await getProducts(createClient());
       setGapInsight(analyzeProductGaps(products));
     } catch (err: unknown) {
       const msg =
@@ -165,12 +199,9 @@ export default function OutfitsPage() {
           </div>
 
           <Button onClick={handleGenerate} disabled={generating}>
-            {generating ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="mr-2 h-4 w-4" />
-            )}
-            Generate Outfits
+            {generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {!generating && <Sparkles className="mr-2 h-4 w-4" />}
+            {outOfCredits ? "Buy more outfits" : "Generate Outfits"}
           </Button>
         </div>
       </div>
@@ -238,6 +269,12 @@ export default function OutfitsPage() {
           )}
         </>
       )}
+
+      <TopUpModal
+        open={showTopUpModal}
+        onOpenChange={setShowTopUpModal}
+        onPurchased={fetchOutfits}
+      />
     </div>
   );
 }

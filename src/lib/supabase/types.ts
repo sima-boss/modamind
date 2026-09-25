@@ -284,6 +284,9 @@ export interface Database {
           current_period_start: string;
           current_period_end: string;
           pending_plan_id: string | null;
+          outfit_generations_used: number;
+          ai_captions_used: number;
+          outfit_topup_balance: number;
           created_at: string;
           updated_at: string;
         };
@@ -295,6 +298,9 @@ export interface Database {
           current_period_start?: string;
           current_period_end: string;
           pending_plan_id?: string | null;
+          outfit_generations_used?: number;
+          ai_captions_used?: number;
+          outfit_topup_balance?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -306,6 +312,9 @@ export interface Database {
           current_period_start?: string;
           current_period_end?: string;
           pending_plan_id?: string | null;
+          outfit_generations_used?: number;
+          ai_captions_used?: number;
+          outfit_topup_balance?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -353,6 +362,27 @@ export interface Database {
         };
         Relationships: [];
       };
+      usage_events: {
+        Row: {
+          id: string;
+          user_id: string;
+          type: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          type: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          type?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -376,6 +406,27 @@ export interface Database {
         Args: { p_user_id: string };
         Returns: Database["public"]["Tables"]["subscriptions"]["Row"];
       };
+      consume_usage_credits: {
+        Args: { p_user_id: string; p_type: string; p_count: number };
+        Returns: { from_monthly: number; from_topup: number }[];
+      };
+      refund_usage_credits: {
+        Args: {
+          p_user_id: string;
+          p_type: string;
+          p_from_monthly: number;
+          p_from_topup: number;
+        };
+        Returns: undefined;
+      };
+      add_outfit_topup: {
+        Args: { p_user_id: string; p_outfits: number; p_amount_aed: number };
+        Returns: Database["public"]["Tables"]["subscriptions"]["Row"];
+      };
+      debug_set_usage_near_limit: {
+        Args: { p_user_id: string };
+        Returns: Database["public"]["Tables"]["subscriptions"]["Row"];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
@@ -396,6 +447,7 @@ export type Plan = Database["public"]["Tables"]["plans"]["Row"];
 export type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
 export type BillingTransaction =
   Database["public"]["Tables"]["billing_transactions"]["Row"];
+export type UsageEvent = Database["public"]["Tables"]["usage_events"]["Row"];
 
 export type SubscriptionWithPlan = Subscription & {
   plan: Plan;

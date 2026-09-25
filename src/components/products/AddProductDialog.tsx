@@ -144,8 +144,14 @@ export function AddProductDialog({ onProductAdded }: AddProductDialogProps) {
       setOpen(false);
       onProductAdded();
     } catch (err: unknown) {
+      // Supabase/Postgrest errors are plain objects with a `message` field,
+      // not real Error instances (e.g. the products-limit trigger's message).
       const message =
-        err instanceof Error ? err.message : "Failed to add product";
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : "Failed to add product";
       setSubmitError(message);
       setStep(null);
     }

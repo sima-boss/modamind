@@ -10,6 +10,7 @@ import type {
   Plan,
   BillingTransaction,
   SubscriptionWithPlan,
+  UsageEvent,
 } from "./types";
 
 type Client = SupabaseClient<Database>;
@@ -174,4 +175,14 @@ export async function getBillingTransactions(supabase: Client) {
 
   if (error) throw error;
   return data as BillingTransaction[];
+}
+
+export async function getUsageEvents(supabase: Client) {
+  const { data, error } = await supabase
+    .from("usage_events")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data as UsageEvent[];
 }

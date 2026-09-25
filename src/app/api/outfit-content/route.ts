@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service";
 
 const SYSTEM_PROMPT = `You are a fashion marketing copywriter. Given an outfit's items and their style attributes, return a JSON object with exactly these fields:
 
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const userId = user.id;
 
   const { items } = await req.json();
 
@@ -40,6 +42,32 @@ export async function POST(req: NextRequest) {
       { error: "items array is required" },
       { status: 400 }
     );
+  }
+
+  const service = createServiceRoleClient();
+  const { data: consumed, error: consumeErr } = await service.rpc(
+    "consume_usage_credits",
+    { p_user_id: userId, p_type: "ai_caption", p_count: 1 }
+  );
+
+  if (consumeErr) {
+    if (consumeErr.message.includes("limit_reached")) {
+      return NextResponse.json(
+        { error: "You've used all your AI captions for this period." },
+        { status: 403 }
+      );
+    }
+    return NextResponse.json({ error: consumeErr.message }, { status: 400 });
+  }
+
+  const { from_monthly, from_topup } = consumed[0];
+  async function refund() {
+    await service.rpc("refund_usage_credits", {
+      p_user_id: userId,
+      p_type: "ai_caption",
+      p_from_monthly: from_monthly,
+      p_from_topup: from_topup,
+    });
   }
 
   // Build a concise text description of the outfit for Claude
@@ -106,6 +134,7 @@ export async function POST(req: NextRequest) {
       "[outfit-content] AI call failed, using fallback:",
       err instanceof Error ? err.message : err
     );
+    await refund();
     return NextResponse.json({ content: FALLBACK_CONTENT, fallback: true });
   }
 }

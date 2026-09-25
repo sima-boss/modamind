@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import Image from "next/image";
 import { toPng } from "html-to-image";
 import {
@@ -29,6 +30,7 @@ import {
   getExportFormat,
 } from "@/lib/outfits/export-formats";
 import { ExportableOutfitCard } from "./ExportableOutfitCard";
+import { SUBSCRIPTION_CHANGED_EVENT } from "@/lib/events";
 
 interface OutfitCardProps {
   outfit: OutfitWithDetails;
@@ -79,6 +81,13 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
       });
 
       if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 403) {
+          throw new Error(
+            body.error ??
+              "You've used all your AI captions for this period. Upgrade your plan for more."
+          );
+        }
         throw new Error("Content generation failed");
       }
 
@@ -97,8 +106,13 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
 
       setContent(saved);
       setIsFallback(!!fallback);
-    } catch {
-      setError("Could not generate content. Please try again later.");
+      window.dispatchEvent(new Event(SUBSCRIPTION_CHANGED_EVENT));
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not generate content. Please try again later."
+      );
     } finally {
       setGenerating(false);
     }
@@ -472,6 +486,14 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
       {error && (
         <div className="border-t px-4 py-3 text-sm text-destructive">
           {error}
+          {error.includes("AI captions") && (
+            <>
+              {" "}
+              <Link href="/billing" className="font-medium underline-offset-4 hover:underline">
+                Go to Billing
+              </Link>
+            </>
+          )}
         </div>
       )}
     </div>
