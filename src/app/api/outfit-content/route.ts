@@ -1,28 +1,67 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
+import { generateContentSchema } from "@/lib/validation/outfits";
+import {
+  PlanGateError,
+  canUseCaptionFormat,
+  canUseCaptionLanguage,
+  requireSubscription,
+  type CaptionFormat,
+  type CaptionLanguage,
+} from "@/lib/plan-gate";
 
-const SYSTEM_PROMPT = `You are a fashion marketing copywriter. Given an outfit's items and their style attributes, return a JSON object with exactly these fields:
+const FORMAT_GUIDANCE: Record<CaptionFormat, string> = {
+  generic:
+    "a plain, platform-neutral caption with no hashtags — suitable for any use",
+  instagram:
+    "an Instagram-ready caption with 2-3 relevant hashtags at the end",
+  tiktok:
+    "a punchy, trend-aware TikTok caption (short, hook-first) with 2-3 relevant hashtags at the end",
+};
+
+const LANGUAGE_GUIDANCE: Record<CaptionLanguage, string> = {
+  en: "Write everything in English.",
+  ar: "Write everything in Arabic, using a natural Gulf (Khaleeji) dialect — not Modern Standard Arabic.",
+};
+
+function buildSystemPrompt(language: CaptionLanguage, format: CaptionFormat): string {
+  return `You are a fashion marketing copywriter. Given an outfit's items and their style attributes, return a JSON object with exactly these fields:
 
 {
   "description": "string",      // 2-3 sentence paragraph describing the outfit
   "styling_tips": ["string"],   // exactly 3 short, actionable styling tips
-  "social_caption": "string"    // Instagram-ready caption with 2-3 hashtags
+  "social_caption": "string"    // ${FORMAT_GUIDANCE[format]}
 }
 
+${LANGUAGE_GUIDANCE[language]}
 Keep the tone modern, confident, and concise.
 Return ONLY valid JSON. No markdown, no explanation.`;
+}
 
-const FALLBACK_CONTENT = {
-  description:
-    "A polished, balanced outfit designed for a clean and confident everyday look.",
-  styling_tips: [
-    "Keep accessories minimal for a refined finish.",
-    "Use neutral footwear and layering pieces for better versatility.",
-    "Stick to a coordinated color palette for a sharper appearance.",
-  ],
-  social_caption:
-    "Clean lines, effortless confidence, and styling that works all day. #Fashnix #SmartStyle #OutfitInspo",
+const FALLBACK_CONTENT: Record<CaptionLanguage, { description: string; styling_tips: string[]; social_caption: string }> = {
+  en: {
+    description:
+      "A polished, balanced outfit designed for a clean and confident everyday look.",
+    styling_tips: [
+      "Keep accessories minimal for a refined finish.",
+      "Use neutral footwear and layering pieces for better versatility.",
+      "Stick to a coordinated color palette for a sharper appearance.",
+    ],
+    social_caption:
+      "Clean lines, effortless confidence, and styling that works all day. #Fashnix #SmartStyle #OutfitInspo",
+  },
+  ar: {
+    description:
+      "إطلالة أنيقة ومتوازنة، مصممة لتمنحك مظهراً يومياً نظيفاً وواثقاً.",
+    styling_tips: [
+      "حافظ على الإكسسوارات البسيطة للحصول على لمسة نهائية راقية.",
+      "استخدم أحذية بألوان محايدة وقطع طبقات لمزيد من التنوع.",
+      "التزم بلوحة ألوان متناسقة لمظهر أكثر تميزاً.",
+    ],
+    social_caption:
+      "أناقة بسيطة وثقة بلا حدود، ستايل يناسبك طول يومك ✨ #Fashnix #ستايل",
+  },
 };
 
 export async function POST(req: NextRequest) {
@@ -35,13 +74,36 @@ export async function POST(req: NextRequest) {
   }
   const userId = user.id;
 
-  const { items } = await req.json();
+  const parsed = generateContentSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+  const { items, language, format } = parsed.data;
 
-  if (!Array.isArray(items) || items.length === 0) {
-    return NextResponse.json(
-      { error: "items array is required" },
-      { status: 400 }
-    );
+  // Language + caption format are plan-gated — checked against the
+  // caller's real subscription, never a client-sent tier.
+  try {
+    const subscription = await requireSubscription(supabase);
+    if (!canUseCaptionLanguage(subscription.plan, language)) {
+      return NextResponse.json(
+        { error: "Arabic captions are a Standard+ feature. Upgrade to unlock." },
+        { status: 403 }
+      );
+    }
+    if (!canUseCaptionFormat(subscription.plan, format)) {
+      return NextResponse.json(
+        {
+          error:
+            "Instagram/TikTok caption formats are a Standard+ feature. Upgrade to unlock.",
+        },
+        { status: 403 }
+      );
+    }
+  } catch (err) {
+    if (err instanceof PlanGateError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    throw err;
   }
 
   const service = createServiceRoleClient();
@@ -110,7 +172,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: "claude-sonnet-5",
         max_tokens: 512,
-        system: SYSTEM_PROMPT,
+        system: buildSystemPrompt(language, format),
         messages: [{ role: "user", content: userMessage }],
       }),
     });
@@ -128,13 +190,18 @@ export async function POST(req: NextRequest) {
       .trim();
     const content = JSON.parse(raw);
 
-    return NextResponse.json({ content, fallback: false });
+    return NextResponse.json({ content, language, format, fallback: false });
   } catch (err: unknown) {
     console.warn(
       "[outfit-content] AI call failed, using fallback:",
       err instanceof Error ? err.message : err
     );
     await refund();
-    return NextResponse.json({ content: FALLBACK_CONTENT, fallback: true });
+    return NextResponse.json({
+      content: FALLBACK_CONTENT[language],
+      language,
+      format,
+      fallback: true,
+    });
   }
 }

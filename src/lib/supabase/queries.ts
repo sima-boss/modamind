@@ -11,6 +11,9 @@ import type {
   BillingTransaction,
   SubscriptionWithPlan,
   UsageEvent,
+  Profile,
+  AnalyticsDailyPoint,
+  AnalyticsSummary,
 } from "./types";
 
 type Client = SupabaseClient<Database>;
@@ -116,6 +119,17 @@ export async function insertOutfitContent(
   return data as OutfitContent;
 }
 
+/** Removes any existing content rows for an outfit — used before
+ * re-inserting so an outfit only ever has one active content row
+ * (e.g. when regenerating in a different language/format). */
+export async function deleteOutfitContent(supabase: Client, outfitId: string) {
+  const { error } = await supabase
+    .from("outfit_content")
+    .delete()
+    .eq("outfit_id", outfitId);
+  if (error) throw error;
+}
+
 export async function getOutfitById(supabase: Client, id: string) {
   const { data, error } = await supabase
     .from("outfits")
@@ -185,4 +199,69 @@ export async function getUsageEvents(supabase: Client) {
 
   if (error) throw error;
   return data as UsageEvent[];
+}
+
+// ── Profile / brand kit ────────────────────────────────────
+
+export async function getCurrentProfile(supabase: Client) {
+  const { data, error } = await supabase.from("profiles").select("*").maybeSingle();
+  if (error) throw error;
+  return data as Profile | null;
+}
+
+export async function updateProfile(
+  supabase: Client,
+  id: string,
+  updates: Database["public"]["Tables"]["profiles"]["Update"]
+) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Profile;
+}
+
+// ── Analytics ──────────────────────────────────────────────
+// Backed by the SECURITY INVOKER functions in 019_analytics_functions.sql,
+// so RLS scopes every result to the signed-in user.
+
+export async function getAnalyticsDailyUsage(
+  supabase: Client,
+  days = 30
+): Promise<AnalyticsDailyPoint[]> {
+  const { data, error } = await supabase.rpc("analytics_daily_usage", {
+    p_days: days,
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getAnalyticsSummary(
+  supabase: Client
+): Promise<AnalyticsSummary> {
+  const { data, error } = await supabase.rpc("analytics_summary");
+  if (error) throw error;
+  return data![0];
+}
+
+export async function getAnalyticsOutfitsByTheme(supabase: Client) {
+  const { data, error } = await supabase.rpc("analytics_outfits_by_theme");
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getAnalyticsCaptionsBreakdown(supabase: Client) {
+  const { data, error } = await supabase.rpc("analytics_captions_breakdown");
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getAnalyticsProductsByCategory(supabase: Client) {
+  const { data, error } = await supabase.rpc("analytics_products_by_category");
+  if (error) throw error;
+  return data ?? [];
 }

@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { generateOutfitsSchema } from "@/lib/validation/outfits";
 import { generateOutfits } from "@/lib/outfits/generate";
+import { PlanGateError, maxOutfitsPerRequest, requireSubscription } from "@/lib/plan-gate";
 
 export async function POST(req: NextRequest) {
   const supabase = createServerSupabaseClient();
@@ -19,6 +20,28 @@ export async function POST(req: NextRequest) {
   }
   const { count, selectedThemes } = parsed.data;
   const requestedMax = count * selectedThemes.length;
+
+  // Bulk generation (more than one outfit per request) is Premium only —
+  // enforced against the caller's real plan, never a client-sent tier.
+  try {
+    const subscription = await requireSubscription(supabase);
+    const cap = maxOutfitsPerRequest(subscription.plan);
+    if (requestedMax > cap) {
+      return NextResponse.json(
+        {
+          error: subscription.plan.has_bulk_generation
+            ? `You can generate up to ${cap} outfits per request.`
+            : "Bulk generation is a Premium feature. Upgrade to generate more than 1 outfit per request.",
+        },
+        { status: 403 }
+      );
+    }
+  } catch (err) {
+    if (err instanceof PlanGateError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    throw err;
+  }
 
   const service = createServiceRoleClient();
   const { data: consumed, error: consumeErr } = await service.rpc(

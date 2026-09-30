@@ -10,6 +10,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
+import { GoogleButton, OrDivider } from "@/components/auth/GoogleButton";
 import { emailSchema, sanitizeNext } from "@/lib/validation/auth";
 
 const loginSchema = z.object({
@@ -41,6 +42,7 @@ function LoginForm() {
   const resetSuccess = searchParams.get("resetSuccess") === "1";
   const verified = searchParams.get("verified") === "1";
   const confirmFailed = searchParams.get("error") === "confirm-failed";
+  const oauthFailed = searchParams.get("error") === "oauth-failed";
 
   async function onSubmit(values: LoginValues) {
     setSubmitting(true);
@@ -94,6 +96,17 @@ function LoginForm() {
           That confirmation link is invalid or has expired.
         </p>
       )}
+
+      {oauthFailed && (
+        <p className="text-sm text-destructive">
+          Google sign-in didn&apos;t complete. Please try again.
+        </p>
+      )}
+
+      <GoogleButton
+        next={searchParams.get("next") ? sanitizeNext(searchParams.get("next")) : null}
+      />
+      <OrDivider />
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-2">

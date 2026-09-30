@@ -59,6 +59,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Post-Google-login profile prompt: reachable with or without a
+  // subscription (new Google users have none yet), so skip the onboarding
+  // redirects below.
+  if (user && pathname === "/complete-profile") {
+    return response;
+  }
+
   if (user && !isPublicPath(pathname) && !AUTH_PAGES.includes(pathname)) {
     const onOnboardingPage = ONBOARDING_PAGES.includes(pathname);
     const { data: subscription } = await supabase

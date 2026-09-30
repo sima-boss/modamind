@@ -113,7 +113,7 @@ export function EditProductDialog({
 
           {/* Price */}
           <div className="space-y-2">
-            <Label htmlFor="edit-price">Price</Label>
+            <Label htmlFor="edit-price">Price (AED)</Label>
             <Input
               id="edit-price"
               type="number"

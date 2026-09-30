@@ -9,6 +9,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
+import { GoogleButton, OrDivider } from "@/components/auth/GoogleButton";
 import { emailSchema, passwordSchema } from "@/lib/validation/auth";
 
 const signupSchema = z
@@ -104,6 +105,9 @@ export default function SignupPage() {
           Start styling smarter with Fashnix
         </p>
       </div>
+
+      <GoogleButton />
+      <OrDivider />
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-2">

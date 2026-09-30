@@ -16,8 +16,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OutfitCard } from "@/components/outfits/OutfitCard";
 import { TopUpModal } from "@/components/billing/TopUpModal";
+import { LockedFeature } from "@/components/billing/LockedFeature";
 import { createClient } from "@/lib/supabase/client";
 import {
+  getCurrentProfile,
   getCurrentSubscription,
   getOutfits,
   getProducts,
@@ -27,10 +29,14 @@ import { analyzeProductGaps, type GapInsight } from "@/lib/outfits/gaps";
 import { cn } from "@/lib/utils";
 import { getRemaining } from "@/lib/usage";
 import { SUBSCRIPTION_CHANGED_EVENT } from "@/lib/events";
-import type { OutfitWithDetails, SubscriptionWithPlan } from "@/lib/supabase/types";
+import { MAX_BULK_OUTFITS, MAX_OUTFITS_WITHOUT_BULK } from "@/lib/plan-gate";
+import type {
+  OutfitWithDetails,
+  Profile,
+  SubscriptionWithPlan,
+} from "@/lib/supabase/types";
 
 const MIN_COUNT = 1;
-const MAX_COUNT = 5;
 
 function matchesSearch(o: OutfitWithDetails, query: string): boolean {
   const q = query.toLowerCase();
@@ -48,11 +54,12 @@ export default function OutfitsPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [countPerTheme, setCountPerTheme] = useState(1);
-  const [selectedThemes, setSelectedThemes] = useState<string[]>(THEME_NAMES);
+  const [selectedThemes, setSelectedThemes] = useState<string[]>([THEME_NAMES[0]]);
   const [gapInsight, setGapInsight] = useState<GapInsight | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionWithPlan | null>(
     null
   );
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
 
   const fetchOutfits = useCallback(async () => {
@@ -60,12 +67,14 @@ export default function OutfitsPage() {
     setError(null);
     try {
       const supabase = createClient();
-      const [data, sub] = await Promise.all([
+      const [data, sub, prof] = await Promise.all([
         getOutfits(supabase),
         getCurrentSubscription(supabase),
+        getCurrentProfile(supabase),
       ]);
       setOutfits(data);
       setSubscription(sub);
+      setProfile(prof);
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Failed to load outfits";
@@ -85,10 +94,43 @@ export default function OutfitsPage() {
     : null;
   const outOfCredits = outfitsRemaining !== null && outfitsRemaining <= 0;
 
+  // Bulk generation (more than one outfit per request) is Premium only.
+  // Default to locked until the plan is known so we never flash an
+  // over-cap selection for a non-bulk plan.
+  const canBulk = subscription?.plan.has_bulk_generation ?? false;
+  const maxOutfitsPerRequest = canBulk ? MAX_BULK_OUTFITS : MAX_OUTFITS_WITHOUT_BULK;
+  const maxCountForSelection = Math.max(
+    MIN_COUNT,
+    Math.floor(maxOutfitsPerRequest / Math.max(1, selectedThemes.length))
+  );
+
+  // Clamp count-per-theme whenever the plan loads or the theme selection
+  // changes, so the client never submits a request the server would
+  // reject for exceeding the plan's per-request cap.
+  useEffect(() => {
+    if (!subscription) return;
+    if (!canBulk && selectedThemes.length > 1) {
+      setSelectedThemes([selectedThemes[0]]);
+      return;
+    }
+    if (countPerTheme > maxCountForSelection) {
+      setCountPerTheme(maxCountForSelection);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subscription, canBulk, selectedThemes.length]);
+
   function toggleTheme(name: string) {
-    setSelectedThemes((prev) =>
-      prev.includes(name) ? prev.filter((t) => t !== name) : [...prev, name]
-    );
+    if (!canBulk) {
+      // Non-bulk plans generate one theme at a time.
+      setSelectedThemes([name]);
+      return;
+    }
+    setSelectedThemes((prev) => {
+      const next = prev.includes(name)
+        ? prev.filter((t) => t !== name)
+        : [...prev, name];
+      return next.length === 0 ? prev : next;
+    });
   }
 
   async function handleGenerate() {
@@ -149,9 +191,14 @@ export default function OutfitsPage() {
       {/* Generation controls */}
       <div className="space-y-4 rounded-xl border bg-card p-4 shadow-sm">
         <div>
-          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Themes
-          </Label>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Themes
+            </Label>
+            {!canBulk && (
+              <LockedFeature label="Select multiple themes" inline />
+            )}
+          </div>
           <div className="mt-2 flex flex-wrap gap-2">
             {THEME_NAMES.map((name) => {
               const active = selectedThemes.includes(name);
@@ -177,25 +224,34 @@ export default function OutfitsPage() {
 
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <Label
-              htmlFor="count-per-theme"
-              className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            >
-              Outfits per theme
-            </Label>
+            <div className="flex items-center gap-2">
+              <Label
+                htmlFor="count-per-theme"
+                className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+              >
+                Outfits per theme
+              </Label>
+              {!canBulk && <LockedFeature label="Bulk generation" inline />}
+            </div>
             <Input
               id="count-per-theme"
               type="number"
               min={MIN_COUNT}
-              max={MAX_COUNT}
+              max={maxCountForSelection}
               value={countPerTheme}
+              disabled={!canBulk}
               onChange={(e) => {
                 const n = parseInt(e.target.value, 10);
                 if (Number.isNaN(n)) return;
-                setCountPerTheme(Math.min(MAX_COUNT, Math.max(MIN_COUNT, n)));
+                setCountPerTheme(Math.min(maxCountForSelection, Math.max(MIN_COUNT, n)));
               }}
               className="mt-2 w-20"
             />
+            {canBulk && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Up to {maxOutfitsPerRequest} outfits per request
+              </p>
+            )}
           </div>
 
           <Button onClick={handleGenerate} disabled={generating}>
@@ -263,7 +319,12 @@ export default function OutfitsPage() {
           ) : (
             <div className="grid gap-6 lg:grid-cols-2">
               {filtered.map((outfit) => (
-                <OutfitCard key={outfit.id} outfit={outfit} />
+                <OutfitCard
+                  key={outfit.id}
+                  outfit={outfit}
+                  plan={subscription?.plan ?? null}
+                  profile={profile}
+                />
               ))}
             </div>
           )}

@@ -161,6 +161,8 @@ export interface Database {
           description: string | null;
           styling_tips: string | null;
           social_caption: string | null;
+          language: string;
+          format: string;
           created_at: string;
         };
         Insert: {
@@ -169,6 +171,8 @@ export interface Database {
           description?: string | null;
           styling_tips?: string | null;
           social_caption?: string | null;
+          language?: string;
+          format?: string;
           created_at?: string;
         };
         Update: {
@@ -177,6 +181,8 @@ export interface Database {
           description?: string | null;
           styling_tips?: string | null;
           social_caption?: string | null;
+          language?: string;
+          format?: string;
           created_at?: string;
         };
         Relationships: [
@@ -194,18 +200,27 @@ export interface Database {
           id: string;
           full_name: string | null;
           business_name: string | null;
+          brand_logo_url: string | null;
+          brand_primary_color: string | null;
+          brand_secondary_color: string | null;
           created_at: string;
         };
         Insert: {
           id: string;
           full_name?: string | null;
           business_name?: string | null;
+          brand_logo_url?: string | null;
+          brand_primary_color?: string | null;
+          brand_secondary_color?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           full_name?: string | null;
           business_name?: string | null;
+          brand_logo_url?: string | null;
+          brand_primary_color?: string | null;
+          brand_secondary_color?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -232,7 +247,7 @@ export interface Database {
           analytics_level: string;
           export_formats: string[] | null;
           has_brand_kit: boolean;
-          has_priority_generation: boolean;
+          has_bulk_generation: boolean;
           team_members_limit: number;
           sort_order: number;
           created_at: string;
@@ -250,7 +265,7 @@ export interface Database {
           analytics_level?: string;
           export_formats?: string[] | null;
           has_brand_kit?: boolean;
-          has_priority_generation?: boolean;
+          has_bulk_generation?: boolean;
           team_members_limit: number;
           sort_order: number;
           created_at?: string;
@@ -268,7 +283,7 @@ export interface Database {
           analytics_level?: string;
           export_formats?: string[] | null;
           has_brand_kit?: boolean;
-          has_priority_generation?: boolean;
+          has_bulk_generation?: boolean;
           team_members_limit?: number;
           sort_order?: number;
           created_at?: string;
@@ -430,11 +445,48 @@ export interface Database {
         Args: { p_user_id: string };
         Returns: Database["public"]["Tables"]["subscriptions"]["Row"];
       };
+      analytics_daily_usage: {
+        Args: { p_days?: number };
+        Returns: { day: string; outfits: number; captions: number }[];
+      };
+      analytics_summary: {
+        Args: Record<string, never>;
+        Returns: {
+          total_outfit_generations: number;
+          total_captions: number;
+          products: number;
+          saved_outfits: number;
+          outfits_last_30: number;
+          outfits_prev_30: number;
+          captions_last_30: number;
+          captions_prev_30: number;
+          active_days_last_30: number;
+          busiest_day: string | null;
+          busiest_day_count: number;
+        }[];
+      };
+      analytics_outfits_by_theme: {
+        Args: Record<string, never>;
+        Returns: { theme: string; total: number }[];
+      };
+      analytics_captions_breakdown: {
+        Args: Record<string, never>;
+        Returns: { language: string; format: string; total: number }[];
+      };
+      analytics_products_by_category: {
+        Args: Record<string, never>;
+        Returns: { category: string; total: number }[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
 }
+
+export type AnalyticsDailyPoint =
+  Database["public"]["Functions"]["analytics_daily_usage"]["Returns"][number];
+export type AnalyticsSummary =
+  Database["public"]["Functions"]["analytics_summary"]["Returns"][number];
 
 // Convenience aliases
 export type Product = Database["public"]["Tables"]["products"]["Row"];

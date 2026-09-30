@@ -31,7 +31,7 @@ export function getPlanFeatures(plan: Plan): string[] {
     features.push(`${plan.export_formats.map((f) => f.toUpperCase()).join("/")} export`);
   }
   if (plan.has_brand_kit) features.push("Brand kit");
-  if (plan.has_priority_generation) features.push("Priority generation");
+  if (plan.has_bulk_generation) features.push("Bulk generation (up to 10 at once)");
 
   features.push(
     `${plan.team_members_limit} team member${plan.team_members_limit === 1 ? "" : "s"}`

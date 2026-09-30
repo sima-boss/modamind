@@ -9,6 +9,7 @@ import {
   Download,
   Layout,
   Loader2,
+  RefreshCw,
   Share2,
   ShoppingBag,
   Sparkles,
@@ -18,8 +19,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
-import { insertOutfitContent } from "@/lib/supabase/queries";
-import type { OutfitContent, OutfitWithDetails } from "@/lib/supabase/types";
+import { deleteOutfitContent, insertOutfitContent } from "@/lib/supabase/queries";
+import type { OutfitContent, OutfitWithDetails, Plan, Profile } from "@/lib/supabase/types";
+import {
+  canUseCaptionFormat,
+  canUseCaptionLanguage,
+  type CaptionFormat,
+  type CaptionLanguage,
+} from "@/lib/plan-gate";
 import {
   getThemeGradient,
   getThemeTextColor,
@@ -33,15 +40,25 @@ import { ExportableOutfitCard } from "./ExportableOutfitCard";
 import { TopUpModal } from "@/components/billing/TopUpModal";
 import { SUBSCRIPTION_CHANGED_EVENT } from "@/lib/events";
 
+const CAPTION_HEADING: Record<CaptionFormat, string> = {
+  generic: "Caption",
+  instagram: "Instagram Caption",
+  tiktok: "TikTok Caption",
+};
+
 interface OutfitCardProps {
   outfit: OutfitWithDetails;
+  /** Caller's current plan — drives caption language/format + brand kit
+   * gating. Null while the subscription is still loading. */
+  plan: Plan | null;
+  /** Caller's profile — supplies brand kit assets for Premium exports. */
+  profile: Profile | null;
 }
 
-export function OutfitCard({ outfit }: OutfitCardProps) {
+export function OutfitCard({ outfit, plan, profile }: OutfitCardProps) {
   const items = outfit.outfit_items ?? [];
-  const [content, setContent] = useState<OutfitContent | null>(
-    outfit.outfit_content?.[0] ?? null
-  );
+  const existingContent = outfit.outfit_content?.[0] ?? null;
+  const [content, setContent] = useState<OutfitContent | null>(existingContent);
   const [isFallback, setIsFallback] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -50,7 +67,22 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
   const [copied, setCopied] = useState(false);
   const [formatId, setFormatId] = useState(DEFAULT_EXPORT_FORMAT.id);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [language, setLanguage] = useState<CaptionLanguage>(
+    (existingContent?.language as CaptionLanguage) ?? "en"
+  );
+  const [captionFormat, setCaptionFormat] = useState<CaptionFormat>(
+    (existingContent?.format as CaptionFormat) ?? "generic"
+  );
   const exportRef = useRef<HTMLDivElement>(null);
+
+  const canArabic = plan ? canUseCaptionLanguage(plan, "ar") : false;
+  const canInstagram = plan ? canUseCaptionFormat(plan, "instagram") : false;
+  const canTiktok = plan ? canUseCaptionFormat(plan, "tiktok") : false;
+  const canBrandKit = plan?.has_brand_kit ?? false;
+  const hasBrandAssets =
+    canBrandKit &&
+    !!profile &&
+    (!!profile.brand_logo_url || !!profile.brand_primary_color);
 
   async function handleGenerateContent() {
     setGenerating(true);
@@ -79,13 +111,15 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
       const res = await fetch("/api/outfit-content", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: payload }),
+        body: JSON.stringify({ items: payload, language, format: captionFormat }),
       });
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         if (res.status === 403) {
-          setShowTopUpModal(true);
+          if (body.error?.includes("captions for this period")) {
+            setShowTopUpModal(true);
+          }
           throw new Error(
             body.error ??
               "You've used all your AI captions for this period."
@@ -96,8 +130,11 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
 
       const { content: aiContent, fallback } = await res.json();
 
-      // Save to DB
+      // Save to DB — an outfit only ever keeps one active content row,
+      // so regenerating (possibly with a different language/format)
+      // replaces whatever was there before.
       const supabase = createClient();
+      await deleteOutfitContent(supabase, outfit.id);
       const saved = await insertOutfitContent(supabase, {
         outfit_id: outfit.id,
         description: aiContent.description,
@@ -105,6 +142,8 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
           ? aiContent.styling_tips.join("\n")
           : aiContent.styling_tips,
         social_caption: aiContent.social_caption,
+        language,
+        format: captionFormat,
       });
 
       setContent(saved);
@@ -131,7 +170,8 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
         pixelRatio: 2,
         cacheBust: true,
         width: format.width,
-        height: format.height,
+        // Default layout sizes to its content; measure the rendered height.
+        height: exportRef.current.offsetHeight,
       });
       const link = document.createElement("a");
       const slug = (outfit.title ?? "outfit").replace(/\s+/g, "-").toLowerCase();
@@ -235,21 +275,6 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
                 {exporting ? "Exporting..." : "Export"}
               </Button>
             </div>
-          )}
-          {!content && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleGenerateContent}
-              disabled={generating}
-            >
-              {generating ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              {generating ? "Generating..." : "Generate Content"}
-            </Button>
           )}
         </div>
       </div>
@@ -439,9 +464,78 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
         </div>
       )}
 
+      {/* Caption options */}
+      <div className="flex flex-wrap items-end gap-3 border-t px-4 py-3">
+        <div className="space-y-1">
+          <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Language
+          </label>
+          <Select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as CaptionLanguage)}
+            className="h-8 w-[150px] text-xs"
+            aria-label="Caption language"
+          >
+            <option value="en">English</option>
+            <option value="ar" disabled={!canArabic}>
+              Arabic (Gulf) {canArabic ? "" : "🔒"}
+            </option>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Format
+          </label>
+          <Select
+            value={captionFormat}
+            onChange={(e) => setCaptionFormat(e.target.value as CaptionFormat)}
+            className="h-8 w-[150px] text-xs"
+            aria-label="Caption format"
+          >
+            <option value="generic">Generic</option>
+            <option value="instagram" disabled={!canInstagram}>
+              Instagram {canInstagram ? "" : "🔒"}
+            </option>
+            <option value="tiktok" disabled={!canTiktok}>
+              TikTok {canTiktok ? "" : "🔒"}
+            </option>
+          </Select>
+        </div>
+
+        {(!canArabic || !canInstagram || !canTiktok) && (
+          <Link
+            href="/billing"
+            className="mb-1.5 text-xs font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Unlock Arabic &amp; Instagram/TikTok captions →
+          </Link>
+        )}
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleGenerateContent}
+          disabled={generating}
+          className="ml-auto"
+        >
+          {generating ? (
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+          ) : content ? (
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+          ) : (
+            <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          {generating ? "Generating..." : content ? "Regenerate" : "Generate Content"}
+        </Button>
+      </div>
+
       {/* AI content */}
       {content && (
-        <div className="space-y-3 border-t px-4 py-4">
+        <div
+          className="space-y-3 border-t px-4 py-4"
+          dir={content.language === "ar" ? "rtl" : "ltr"}
+        >
           {isFallback && (
             <p className="text-[11px] italic text-muted-foreground">
               Generated with fallback content
@@ -476,8 +570,13 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
           {/* Social caption */}
           {content.social_caption && (
             <div className="rounded-lg bg-muted/50 px-3 py-2.5">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Instagram Caption
+              <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {CAPTION_HEADING[(content.format as CaptionFormat) ?? "generic"]}
+                {content.language === "ar" && (
+                  <Badge variant="secondary" className="text-[10px]">
+                    AR
+                  </Badge>
+                )}
               </p>
               <p className="text-sm italic">{content.social_caption}</p>
             </div>
@@ -489,7 +588,7 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
       {error && (
         <div className="border-t px-4 py-3 text-sm text-destructive">
           {error}
-          {error.includes("AI captions") && (
+          {(error.includes("AI captions") || error.includes("Upgrade")) && (
             <>
               {" "}
               <Link href="/billing" className="font-medium underline-offset-4 hover:underline">
@@ -515,6 +614,16 @@ export function OutfitCard({ outfit }: OutfitCardProps) {
           width={getExportFormat(formatId).width}
           height={getExportFormat(formatId).height}
           layout={getExportFormat(formatId).layout}
+          brandKit={
+            hasBrandAssets
+              ? {
+                  logoUrl: profile!.brand_logo_url,
+                  primaryColor: profile!.brand_primary_color,
+                  secondaryColor: profile!.brand_secondary_color,
+                  businessName: profile!.business_name,
+                }
+              : null
+          }
         />
       </div>
     )}

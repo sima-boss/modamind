@@ -254,7 +254,7 @@ export function AddProductDialog({ onProductAdded }: AddProductDialogProps) {
 
           {/* Price */}
           <div className="space-y-2">
-            <Label htmlFor="price">Price</Label>
+            <Label htmlFor="price">Price (AED)</Label>
             <Input
               id="price"
               type="number"

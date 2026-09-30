@@ -146,9 +146,14 @@ export default function DashboardPage() {
     fetchData();
   }, [fetchData]);
 
-  const contentCount = outfits.filter(
-    (o) => o.outfit_content?.length > 0
-  ).length;
+  // Real usage lives on the subscription counters (incremented server-side
+  // on every generation/caption call), not on counting joined rows —
+  // outfits get replaced wholesale on regeneration and demo/debug usage
+  // paths bump the counters without necessarily leaving matching rows
+  // behind, so a row-count here would silently undercount actual usage.
+  const contentCount = subscription
+    ? subscription.outfit_generations_used + subscription.ai_captions_used
+    : 0;
 
   if (loading) {
     return (

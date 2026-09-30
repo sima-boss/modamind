@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { deleteProduct, insertProductAttributes } from "@/lib/supabase/queries";
+import { formatAED } from "@/lib/format";
 import type { ProductWithAttributes } from "@/lib/supabase/types";
 import { EditProductDialog } from "./EditProductDialog";
 
@@ -102,7 +103,7 @@ export function ProductCard({ product, onProductChanged }: ProductCardProps) {
               {product.name}
             </h3>
             <span className="shrink-0 font-semibold">
-              ${Number(product.price).toFixed(2)}
+              {formatAED(Number(product.price))}
             </span>
           </div>
 
