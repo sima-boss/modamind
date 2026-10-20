@@ -33,9 +33,5 @@ export function getPlanFeatures(plan: Plan): string[] {
   if (plan.has_brand_kit) features.push("Brand kit");
   if (plan.has_bulk_generation) features.push("Bulk generation (up to 10 at once)");
 
-  features.push(
-    `${plan.team_members_limit} team member${plan.team_members_limit === 1 ? "" : "s"}`
-  );
-
   return features;
 }
