@@ -8,12 +8,17 @@
  *    - Style overlap: shared style tags × 2
  *    - Season match: +2 per matching pair
  *
+ * 0. Theme eligibility (hard filter, per product):
+ *    - Any avoided keyword → excluded
+ *    - Otherwise needs a matching formality or a preferred keyword
+ *    - A theme with no eligible product for some role produces nothing
+ *
  * 2. Theme fit (per product):
  *    - Preferred keyword match: +3 per match
  *    - Avoided keyword match: −4 per match
  *    - Dark color bonus (Evening Look): +2
  *
- * 3. Diversity (per product, within one generation run):
+ * 3. Diversity (per product, across one generation run):
  *    - Soft reuse penalty: −3 × times already used
  *    - Unused product bonus: +1
  *
@@ -60,6 +65,8 @@ export const CATEGORY_TO_ROLE: Record<string, string> = {
 interface Theme {
   name: string;
   title: string;
+  /** Adjective used in "not enough X items" messages, e.g. "formal" */
+  fitLabel: string;
   formality: string[];
   requiredRoles: string[][];
   /** Keywords that earn a bonus when found in a product's attributes */
@@ -74,6 +81,7 @@ const THEMES: Theme[] = [
   {
     name: "Weekend Casual",
     title: "Weekend Casual",
+    fitLabel: "casual",
     formality: ["casual"],
     requiredRoles: [
       ["top", "bottom", "shoes"],
@@ -93,6 +101,7 @@ const THEMES: Theme[] = [
   {
     name: "Office Essentials",
     title: "Office Essentials",
+    fitLabel: "office-appropriate",
     formality: ["formal", "smart-casual"],
     requiredRoles: [
       ["top", "bottom", "shoes"],
@@ -112,6 +121,7 @@ const THEMES: Theme[] = [
   {
     name: "Smart Casual",
     title: "Smart Casual",
+    fitLabel: "smart-casual",
     formality: ["smart-casual", "casual"],
     requiredRoles: [
       ["top", "bottom", "shoes"],
@@ -129,6 +139,7 @@ const THEMES: Theme[] = [
   {
     name: "Evening Look",
     title: "Evening Look",
+    fitLabel: "evening",
     formality: ["formal", "smart-casual"],
     requiredRoles: [
       ["top", "bottom", "shoes", "accessory"],
@@ -146,6 +157,7 @@ const THEMES: Theme[] = [
   {
     name: "Gym / Athleisure",
     title: "Gym / Athleisure",
+    fitLabel: "athletic",
     formality: ["casual"],
     requiredRoles: [
       ["top", "bottom", "shoes"],
@@ -161,6 +173,7 @@ const THEMES: Theme[] = [
   {
     name: "Date Night",
     title: "Date Night",
+    fitLabel: "dressy",
     formality: ["formal", "smart-casual"],
     requiredRoles: [
       ["dress", "shoes", "accessory"],
@@ -177,6 +190,7 @@ const THEMES: Theme[] = [
   {
     name: "Streetwear",
     title: "Streetwear",
+    fitLabel: "streetwear",
     formality: ["casual", "smart-casual"],
     requiredRoles: [
       ["top", "bottom", "shoes"],
@@ -193,6 +207,7 @@ const THEMES: Theme[] = [
   {
     name: "Beach / Resort",
     title: "Beach / Resort",
+    fitLabel: "resort",
     formality: ["casual"],
     requiredRoles: [
       ["top", "bottom", "shoes"],
@@ -209,6 +224,7 @@ const THEMES: Theme[] = [
   {
     name: "Eid / Celebration",
     title: "Eid / Celebration",
+    fitLabel: "formal",
     formality: ["formal"],
     requiredRoles: [
       ["dress", "shoes", "accessory"],
@@ -226,6 +242,7 @@ const THEMES: Theme[] = [
   {
     name: "Business Meeting",
     title: "Business Meeting",
+    fitLabel: "formal",
     formality: ["formal", "smart-casual"],
     requiredRoles: [
       ["top", "bottom", "shoes"],
@@ -253,6 +270,7 @@ const REUSE_PENALTY = -3;
 const UNUSED_BONUS = 1;
 const JITTER_RANGE = 4;
 const TOP_POOL_SIZE = 5;
+const MAX_COMBOS = 200;
 
 // ── Utilities ─────────────────────────────────────────────
 
@@ -317,6 +335,64 @@ function productKeywords(p: ProductWithAttributes): Set<string> {
   words.add(p.category.toLowerCase());
 
   return words;
+}
+
+/**
+ * Whether a product is appropriate for a theme at all. Avoided keywords
+ * always disqualify; otherwise the product needs either a formality the
+ * theme accepts or at least one preferred keyword.
+ */
+function productFitsTheme(p: ProductWithAttributes, theme: Theme): boolean {
+  const kw = productKeywords(p);
+  if (theme.avoided.some((a) => kw.has(a))) return false;
+  const f = getFormality(p);
+  if (f && theme.formality.includes(f)) return true;
+  return theme.preferred.some((pref) => kw.has(pref));
+}
+
+/** Products grouped by outfit role (unshuffled). */
+function groupByRole(
+  products: ProductWithAttributes[]
+): Map<string, ProductWithAttributes[]> {
+  const byRole = new Map<string, ProductWithAttributes[]>();
+  for (const p of products) {
+    const role = CATEGORY_TO_ROLE[p.category];
+    if (!role) continue;
+    const list = byRole.get(role) ?? [];
+    list.push(p);
+    byRole.set(role, list);
+  }
+  return byRole;
+}
+
+export type ThemeFitResult =
+  | { ok: true }
+  | { ok: false; message: string };
+
+/**
+ * Checks — before anything is generated or charged — whether the catalog
+ * can build at least one outfit for the theme from theme-appropriate
+ * products only.
+ */
+export function checkThemeFit(
+  products: ProductWithAttributes[],
+  themeName: string
+): ThemeFitResult {
+  const theme = THEMES.find((t) => t.name === themeName);
+  if (!theme) return { ok: false, message: `Unknown theme "${themeName}".` };
+
+  const byRole = groupByRole(products);
+  const fits = theme.requiredRoles.some((roles) =>
+    roles.every((r) =>
+      (byRole.get(r) ?? []).some((p) => productFitsTheme(p, theme))
+    )
+  );
+  if (fits) return { ok: true };
+
+  return {
+    ok: false,
+    message: `Your catalog doesn't have enough ${theme.fitLabel} items for ${theme.name}.`,
+  };
 }
 
 // ── Color sets ────────────────────────────────────────────
@@ -428,25 +504,21 @@ function coreKey(
  *                        hard-skipped.
  * @param selectedThemes  When provided, only themes whose `name` is in this
  *                        list are considered. Omit to use every theme.
+ * @param usageCounts     Per-product use counts, mutated in place. Pass the
+ *                        same map across calls so the reuse penalty spans
+ *                        the whole generation run.
  */
 export function matchOutfits(
   products: ProductWithAttributes[],
   existingKeys?: Set<string>,
-  selectedThemes?: string[]
+  selectedThemes?: string[],
+  usageCounts: Map<string, number> = new Map()
 ): OutfitCandidate[] {
   const usedFullKeys = new Set(existingKeys);
   const usedCoreKeys = new Set<string>();
-  const usageCounts = new Map<string, number>();
 
   // Group products by role, shuffling each pool for variety
-  const byRole = new Map<string, ProductWithAttributes[]>();
-  for (const p of products) {
-    const role = CATEGORY_TO_ROLE[p.category];
-    if (!role) continue;
-    const list = byRole.get(role) ?? [];
-    list.push(p);
-    byRole.set(role, list);
-  }
+  const byRole = groupByRole(products);
   byRole.forEach((pool, role) => {
     byRole.set(role, shuffle(pool));
   });
@@ -468,18 +540,15 @@ export function matchOutfits(
     }[] = [];
 
     for (const roles of theme.requiredRoles) {
-      if (roles.some((r) => !byRole.get(r)?.length)) continue;
+      // Only theme-appropriate products — no fallback to the full pool,
+      // so an outfit can never contain an item that doesn't fit the theme.
+      const pools = roles.map((r) => ({
+        role: r,
+        items: (byRole.get(r) ?? []).filter((p) => productFitsTheme(p, theme)),
+      }));
+      if (pools.some((p) => p.items.length === 0)) continue;
 
-      const pools = roles.map((r) => {
-        const pool = byRole.get(r)!;
-        const filtered = pool.filter((p) => {
-          const f = getFormality(p);
-          return !f || theme.formality.includes(f);
-        });
-        return { role: r, items: filtered.length > 0 ? filtered : pool };
-      });
-
-      const combos = cartesian(pools.map((p) => p.items), 200);
+      const combos = sampleCombos(pools.map((p) => p.items), MAX_COMBOS);
 
       for (const combo of combos) {
         const ids = combo.map((p) => p.id);
@@ -565,5 +634,27 @@ function cartesian<T>(arrays: T[][], limit: number): T[][] {
   }
 
   helper(0, []);
+  return result;
+}
+
+/**
+ * Up to `limit` distinct combos. Small spaces are enumerated fully; large
+ * ones are sampled at random so every product has a chance to appear
+ * (depth-first enumeration with a cap only ever reaches the first few
+ * items of the first pool).
+ */
+function sampleCombos<T>(arrays: T[][], limit: number): T[][] {
+  const total = arrays.reduce((n, a) => n * a.length, 1);
+  if (total <= limit) return cartesian(arrays, limit);
+
+  const seen = new Set<string>();
+  const result: T[][] = [];
+  for (let attempt = 0; result.length < limit && attempt < limit * 5; attempt++) {
+    const idx = arrays.map((a) => Math.floor(Math.random() * a.length));
+    const key = idx.join(",");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(idx.map((i, k) => arrays[k][i]));
+  }
   return result;
 }
