@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, OutfitWithDetails } from "@/lib/supabase/types";
+import type {
+  Database,
+  OutfitWithDetails,
+  ProductWithAttributes,
+} from "@/lib/supabase/types";
 import { getProducts, getOutfits } from "@/lib/supabase/queries";
 import { comboKey, matchOutfits, type OutfitCandidate } from "./matcher";
 
@@ -10,6 +14,8 @@ export interface GenerateOutfitsOptions {
   count?: number;
   /** When provided, only these theme names are generated. */
   selectedThemes?: string[];
+  /** Already-fetched products (e.g. from a theme-fit pre-check). */
+  products?: ProductWithAttributes[];
 }
 
 /**
@@ -29,7 +35,7 @@ export async function generateOutfits(
   const { selectedThemes } = options;
 
   // 1. Fetch products with attributes
-  const products = await getProducts(supabase);
+  const products = options.products ?? (await getProducts(supabase));
 
   if (products.length < 2) {
     throw new Error(
@@ -51,10 +57,12 @@ export async function generateOutfits(
   // 3. Run the matcher `count` times per theme. Each run's picks are fed
   //    back in as `existingKeys` so later runs don't repeat the same
   //    exact combo — this is how we get multiple distinct outfits/theme.
+  //    Usage counts are shared too, so the reuse penalty spans all runs.
   const usedKeys = new Set<string>();
+  const usageCounts = new Map<string, number>();
   const candidates: OutfitCandidate[] = [];
   for (let i = 0; i < count; i++) {
-    const batch = matchOutfits(products, usedKeys, selectedThemes);
+    const batch = matchOutfits(products, usedKeys, selectedThemes, usageCounts);
     for (const candidate of batch) {
       usedKeys.add(comboKey(candidate.items.map((item) => item.product.id)));
     }

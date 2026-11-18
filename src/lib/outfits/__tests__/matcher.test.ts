@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { matchOutfits, comboKey, CATEGORY_TO_ROLE, THEME_NAMES } from "../matcher";
+import {
+  matchOutfits,
+  checkThemeFit,
+  comboKey,
+  CATEGORY_TO_ROLE,
+  THEME_NAMES,
+} from "../matcher";
 import type { ProductWithAttributes } from "@/lib/supabase/types";
 
 /**
@@ -195,5 +201,97 @@ describe("matchOutfits", () => {
         expect(results[0].items.length).toBeGreaterThanOrEqual(2);
       }
     }
+  });
+});
+
+describe("theme fit", () => {
+  // A sports store: everything is casual/athletic, nothing formal.
+  const sportsCatalog: ProductWithAttributes[] = [
+    product({ id: "tee-1", category: "tops", tags: ["athletic", "sporty"], formality: "casual", clothingType: "t-shirt" }),
+    product({ id: "tee-2", category: "activewear", tags: ["workout"], formality: "casual", clothingType: "tank top" }),
+    product({ id: "jogger-1", category: "bottoms", tags: ["athletic"], formality: "casual", clothingType: "joggers" }),
+    product({ id: "short-1", category: "bottoms", tags: ["sporty"], formality: "casual", clothingType: "shorts" }),
+    product({ id: "sneaker-1", category: "shoes", tags: ["sporty"], formality: "casual", clothingType: "sneakers" }),
+  ];
+
+  it("rejects formal themes for a sportswear-only catalog with a clear message", () => {
+    const meeting = checkThemeFit(sportsCatalog, "Business Meeting");
+    expect(meeting).toEqual({
+      ok: false,
+      message: "Your catalog doesn't have enough formal items for Business Meeting.",
+    });
+    expect(checkThemeFit(sportsCatalog, "Eid / Celebration").ok).toBe(false);
+  });
+
+  it("accepts a theme the catalog actually supports", () => {
+    expect(checkThemeFit(sportsCatalog, "Gym / Athleisure")).toEqual({ ok: true });
+  });
+
+  it("never builds an outfit from items that don't fit the theme", () => {
+    for (let i = 0; i < 10; i++) {
+      const results = matchOutfits(sportsCatalog, undefined, [
+        "Business Meeting",
+        "Eid / Celebration",
+        "Evening Look",
+      ]);
+      expect(results).toEqual([]);
+    }
+    const gym = matchOutfits(sportsCatalog, undefined, ["Gym / Athleisure"]);
+    expect(gym.length).toBe(1);
+  });
+
+  it("does not let one off-theme item into an otherwise fitting outfit", () => {
+    // Formal top + trousers, but the only shoes are sneakers (avoided).
+    const mixed = [
+      product({ id: "shirt", category: "tops", formality: "formal", clothingType: "shirt" }),
+      product({ id: "trousers", category: "bottoms", formality: "formal", clothingType: "trousers" }),
+      product({ id: "sneaker", category: "shoes", formality: "casual", clothingType: "sneakers" }),
+    ];
+    for (let i = 0; i < 10; i++) {
+      const [outfit] = matchOutfits(mixed, undefined, ["Business Meeting"]);
+      // Falls back to the [top, bottom] option instead of adding sneakers.
+      expect(outfit.items.map((it) => it.product.id).sort()).toEqual(["shirt", "trousers"]);
+    }
+  });
+});
+
+describe("diversity", () => {
+  // 10 interchangeable tops/bottoms/shoes: 1000 combos, well over the
+  // 200-combo cap, so depth-first enumeration would only ever see 2 tops.
+  const bigCatalog: ProductWithAttributes[] = ["tops", "bottoms", "shoes"].flatMap(
+    (category) =>
+      Array.from({ length: 10 }, (_, i) =>
+        product({ id: `${category}-${i}`, category, formality: "casual" })
+      )
+  );
+  const casualThemes = [
+    "Weekend Casual",
+    "Smart Casual",
+    "Gym / Athleisure",
+    "Streetwear",
+    "Beach / Resort",
+  ];
+
+  it("spreads tops across themes instead of reusing the same few", () => {
+    for (let run = 0; run < 5; run++) {
+      const results = matchOutfits(bigCatalog, undefined, casualThemes);
+      expect(results.length).toBe(casualThemes.length);
+      const tops = new Set(
+        results.map((r) => r.items.find((it) => it.role === "top")!.product.id)
+      );
+      expect(tops.size).toBeGreaterThanOrEqual(4);
+    }
+  });
+
+  it("carries the reuse penalty across rounds when usage counts are shared", () => {
+    const usageCounts = new Map<string, number>();
+    const usedKeys = new Set<string>();
+    const tops: string[] = [];
+    for (let round = 0; round < 3; round++) {
+      const [outfit] = matchOutfits(bigCatalog, usedKeys, ["Weekend Casual"], usageCounts);
+      usedKeys.add(comboKey(outfit.items.map((it) => it.product.id)));
+      tops.push(outfit.items.find((it) => it.role === "top")!.product.id);
+    }
+    expect(new Set(tops).size).toBe(3);
   });
 });

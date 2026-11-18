@@ -52,6 +52,7 @@ export default function OutfitsPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [skippedNotice, setSkippedNotice] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [countPerTheme, setCountPerTheme] = useState(1);
   const [selectedThemes, setSelectedThemes] = useState<string[]>([THEME_NAMES[0]]);
@@ -144,6 +145,7 @@ export default function OutfitsPage() {
     }
     setGenerating(true);
     setError(null);
+    setSkippedNotice(null);
     try {
       const res = await fetch("/api/outfits/generate", {
         method: "POST",
@@ -160,9 +162,17 @@ export default function OutfitsPage() {
         throw new Error(body.error ?? "Failed to generate outfits");
       }
 
+      const body: { skipped?: { theme: string; message: string }[] } =
+        await res.json().catch(() => ({}));
+
       window.dispatchEvent(new Event(SUBSCRIPTION_CHANGED_EVENT));
 
       await fetchOutfits();
+      if (body.skipped?.length) {
+        setSkippedNotice(
+          `Skipped (no credits charged): ${body.skipped.map((s) => s.message).join(" ")}`
+        );
+      }
       const products = await getProducts(createClient());
       setGapInsight(analyzeProductGaps(products));
     } catch (err: unknown) {
@@ -267,6 +277,13 @@ export default function OutfitsPage() {
         <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0" />
           {error}
+        </div>
+      )}
+
+      {skippedNotice && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {skippedNotice}
         </div>
       )}
 

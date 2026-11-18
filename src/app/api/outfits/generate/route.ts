@@ -3,6 +3,8 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { generateOutfitsSchema } from "@/lib/validation/outfits";
 import { generateOutfits } from "@/lib/outfits/generate";
+import { checkThemeFit } from "@/lib/outfits/matcher";
+import { getProducts } from "@/lib/supabase/queries";
 import { PlanGateError, maxOutfitsPerRequest, requireSubscription } from "@/lib/plan-gate";
 
 export async function POST(req: NextRequest) {
@@ -43,10 +45,37 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
+  // Theme-fit pre-check — runs before credits are charged and before
+  // generateOutfits() clears the existing set, so a catalog that can't
+  // support a theme costs nothing and loses nothing.
+  let products: Awaited<ReturnType<typeof getProducts>>;
+  try {
+    products = await getProducts(supabase);
+  } catch {
+    return NextResponse.json({ error: "Failed to load products" }, { status: 500 });
+  }
+
+  const fittingThemes: string[] = [];
+  const skipped: { theme: string; message: string }[] = [];
+  for (const theme of selectedThemes) {
+    const fit = checkThemeFit(products, theme);
+    if (fit.ok) fittingThemes.push(theme);
+    else skipped.push({ theme, message: fit.message });
+  }
+
+  if (fittingThemes.length === 0) {
+    return NextResponse.json(
+      { error: skipped.map((s) => s.message).join(" "), skipped },
+      { status: 422 }
+    );
+  }
+
+  const chargeCount = count * fittingThemes.length;
+
   const service = createServiceRoleClient();
   const { data: consumed, error: consumeErr } = await service.rpc(
     "consume_usage_credits",
-    { p_user_id: user.id, p_type: "outfit_generation", p_count: requestedMax }
+    { p_user_id: user.id, p_type: "outfit_generation", p_count: chargeCount }
   );
 
   if (consumeErr) {
@@ -61,12 +90,16 @@ export async function POST(req: NextRequest) {
   let outfits: Awaited<ReturnType<typeof generateOutfits>> = [];
   let generateError: string | null = null;
   try {
-    outfits = await generateOutfits(supabase, { count, selectedThemes });
+    outfits = await generateOutfits(supabase, {
+      count,
+      selectedThemes: fittingThemes,
+      products,
+    });
   } catch (err) {
     generateError = err instanceof Error ? err.message : "Failed to generate outfits";
   }
 
-  const shortfall = requestedMax - outfits.length;
+  const shortfall = chargeCount - outfits.length;
   if (shortfall > 0) {
     const refundExtra = Math.min(shortfall, from_extra);
     const refundMonthly = shortfall - refundExtra;
@@ -85,5 +118,5 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ outfits });
+  return NextResponse.json({ outfits, skipped });
 }
