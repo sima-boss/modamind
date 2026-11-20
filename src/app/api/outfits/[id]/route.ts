@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database, OutfitWithDetails } from "@/lib/supabase/types";
 
+// Always read fresh: a deleted outfit must disappear from its lookbook link.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 /**
  * Public read endpoint for a single outfit — used by the shareable
  * lookbook page. Uses the service role key to bypass RLS (owner-scoped
@@ -22,7 +26,11 @@ export async function GET(
     );
   }
 
-  const supabase = createClient<Database>(url, serviceKey);
+  const supabase = createClient<Database>(url, serviceKey, {
+    global: {
+      fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+    },
+  });
 
   const { data, error } = await supabase
     .from("outfits")

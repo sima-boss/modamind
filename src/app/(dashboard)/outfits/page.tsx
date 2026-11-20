@@ -8,6 +8,7 @@ import {
   Shirt,
   Sparkles,
   Lightbulb,
+  Trash2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -17,8 +18,10 @@ import { Label } from "@/components/ui/label";
 import { OutfitCard } from "@/components/outfits/OutfitCard";
 import { TopUpModal } from "@/components/billing/TopUpModal";
 import { LockedFeature } from "@/components/billing/LockedFeature";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 import {
+  deleteAllOutfits,
   getCurrentProfile,
   getCurrentSubscription,
   getOutfits,
@@ -62,6 +65,7 @@ export default function OutfitsPage() {
   );
   const [profile, setProfile] = useState<Profile | null>(null);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
 
   const fetchOutfits = useCallback(async () => {
     setLoading(true);
@@ -344,11 +348,22 @@ export default function OutfitsPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Badge variant="secondary">{filtered.length}</Badge>
-            {search
-              ? `of ${outfits.length} outfit${outfits.length !== 1 ? "s" : ""}`
-              : `outfit${filtered.length !== 1 ? "s" : ""} generated`}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Badge variant="secondary">{filtered.length}</Badge>
+              {search
+                ? `of ${outfits.length} outfit${outfits.length !== 1 ? "s" : ""}`
+                : `outfit${filtered.length !== 1 ? "s" : ""} generated`}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmClearAll(true)}
+              className="text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+              Clear all outfits
+            </Button>
           </div>
 
           {filtered.length === 0 ? (
@@ -363,6 +378,9 @@ export default function OutfitsPage() {
                   outfit={outfit}
                   subscription={subscription}
                   profile={profile}
+                  onDeleted={(id) =>
+                    setOutfits((prev) => prev.filter((o) => o.id !== id))
+                  }
                 />
               ))}
             </div>
@@ -374,6 +392,19 @@ export default function OutfitsPage() {
         open={showTopUpModal}
         onOpenChange={setShowTopUpModal}
         onPurchased={fetchOutfits}
+      />
+
+      <ConfirmDialog
+        open={confirmClearAll}
+        onOpenChange={setConfirmClearAll}
+        title={`Delete all ${outfits.length} outfit${outfits.length !== 1 ? "s" : ""}?`}
+        description="Shared links to them will stop working. This can't be undone."
+        confirmLabel="Delete all"
+        onConfirm={async () => {
+          await deleteAllOutfits(createClient());
+          setOutfits([]);
+          setSearch("");
+        }}
       />
     </div>
   );

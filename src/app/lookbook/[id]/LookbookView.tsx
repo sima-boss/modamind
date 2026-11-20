@@ -2,9 +2,38 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { AlertCircle, Loader2, ShoppingBag, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { Loader2, ShoppingBag, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { BrandMark } from "@/components/layout/BrandMark";
 import type { OutfitWithDetails } from "@/lib/supabase/types";
+
+type LoadError = "not_found" | "failed";
+
+function LookbookUnavailable({ reason }: { reason: LoadError }) {
+  const notFound = reason === "not_found";
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-muted/20 px-4">
+      <div className="w-full max-w-md rounded-xl border bg-card p-8 text-center shadow-sm">
+        <BrandMark className="justify-center" />
+        <h1 className="mt-6 text-xl font-semibold">
+          {notFound
+            ? "This lookbook is no longer available"
+            : "We couldn't load this lookbook"}
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {notFound
+            ? "It may have been removed by its owner."
+            : "Please try again in a moment."}
+        </p>
+        <Button asChild className="mt-6">
+          <Link href="/">Go to Fashnix home</Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 interface LookbookViewProps {
   id: string;
@@ -13,24 +42,25 @@ interface LookbookViewProps {
 export function LookbookView({ id }: LookbookViewProps) {
   const [outfit, setOutfit] = useState<OutfitWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadError | null>(null);
 
   useEffect(() => {
     let active = true;
 
     async function load() {
       try {
-        const res = await fetch(`/api/outfits/${id}`);
+        const res = await fetch(`/api/outfits/${id}`, { cache: "no-store" });
         if (!res.ok) {
-          const body = await res.json().catch(() => null);
-          throw new Error(body?.error ?? "Outfit not found");
+          if (active) setError(res.status === 404 ? "not_found" : "failed");
+          return;
         }
         const { outfit: data } = await res.json();
-        if (active) setOutfit(data);
-      } catch (err: unknown) {
         if (active) {
-          setError(err instanceof Error ? err.message : "Failed to load outfit");
+          if (data) setOutfit(data);
+          else setError("not_found");
         }
+      } catch {
+        if (active) setError("failed");
       } finally {
         if (active) setLoading(false);
       }
@@ -51,14 +81,7 @@ export function LookbookView({ id }: LookbookViewProps) {
   }
 
   if (error || !outfit) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-muted/20 px-4 text-center">
-        <AlertCircle className="h-8 w-8 text-muted-foreground/50" />
-        <p className="text-sm text-muted-foreground">
-          {error ?? "This outfit could not be found."}
-        </p>
-      </div>
-    );
+    return <LookbookUnavailable reason={error ?? "not_found"} />;
   }
 
   const items = outfit.outfit_items ?? [];

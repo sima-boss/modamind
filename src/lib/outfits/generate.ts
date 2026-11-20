@@ -4,7 +4,7 @@ import type {
   OutfitWithDetails,
   ProductWithAttributes,
 } from "@/lib/supabase/types";
-import { getProducts, getOutfits } from "@/lib/supabase/queries";
+import { getProducts, getOutfitsByIds } from "@/lib/supabase/queries";
 import { comboKey, matchOutfits, type OutfitCandidate } from "./matcher";
 
 type Client = SupabaseClient<Database>;
@@ -19,13 +19,15 @@ export interface GenerateOutfitsOptions {
 }
 
 /**
- * Replaces the current set of outfits with a fresh, diverse set.
+ * Generates a fresh, diverse batch of outfits and ADDS it to the user's
+ * existing outfits. Existing outfits are never deleted here — shared
+ * lookbook links must keep working; users delete outfits themselves.
  *
  * 1. Fetches all products with attributes
- * 2. Deletes existing outfits (CASCADE handles items + content)
- * 3. Runs the diversity-aware matcher, once per requested outfit-per-theme
- * 4. Saves the new outfits
- * 5. Returns the fresh set
+ * 2. Runs the diversity-aware matcher, once per requested outfit-per-theme
+ * 3. Saves the new outfits (an outfit whose items fail to save is removed)
+ * 4. Returns ONLY the newly created outfits — the generate route bases its
+ *    credit refund on this count, so it must not include older outfits.
  */
 export async function generateOutfits(
   supabase: Client,
@@ -43,18 +45,7 @@ export async function generateOutfits(
     );
   }
 
-  // 2. Delete existing outfits — ON DELETE CASCADE clears outfit_items + outfit_content
-  const existingOutfits = await getOutfits(supabase);
-  if (existingOutfits.length > 0) {
-    const outfitIds = existingOutfits.map((o) => o.id);
-    const { error: delErr } = await supabase
-      .from("outfits")
-      .delete()
-      .in("id", outfitIds);
-    if (delErr) throw delErr;
-  }
-
-  // 3. Run the matcher `count` times per theme. Each run's picks are fed
+  // 2. Run the matcher `count` times per theme. Each run's picks are fed
   //    back in as `existingKeys` so later runs don't repeat the same
   //    exact combo — this is how we get multiple distinct outfits/theme.
   //    Usage counts are shared too, so the reuse penalty spans all runs.
@@ -75,7 +66,8 @@ export async function generateOutfits(
     );
   }
 
-  // 4. Save each outfit
+  // 3. Save each outfit
+  const createdIds: string[] = [];
   for (const candidate of candidates) {
     const { data: outfit, error: outfitErr } = await supabase
       .from("outfits")
@@ -98,9 +90,16 @@ export async function generateOutfits(
       .from("outfit_items")
       .insert(items);
 
-    if (itemsErr) throw itemsErr;
+    if (itemsErr) {
+      // Never keep a half-saved outfit with no items. Best-effort cleanup:
+      // the original items error is what the caller needs to see.
+      await supabase.from("outfits").delete().eq("id", outfit.id);
+      throw itemsErr;
+    }
+
+    createdIds.push(outfit.id);
   }
 
-  // 5. Return the fresh set
-  return getOutfits(supabase);
+  // 4. Return only the outfits created by this call
+  return getOutfitsByIds(supabase, createdIds);
 }

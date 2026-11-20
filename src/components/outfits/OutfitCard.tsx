@@ -13,6 +13,7 @@ import {
   Share2,
   ShoppingBag,
   Sparkles,
+  Trash2,
   Type,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +21,12 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { createClient } from "@/lib/supabase/client";
-import { deleteOutfitContent, insertOutfitContent } from "@/lib/supabase/queries";
+import {
+  deleteOutfit,
+  deleteOutfitContent,
+  insertOutfitContent,
+} from "@/lib/supabase/queries";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type {
   OutfitContent,
   OutfitWithDetails,
@@ -60,9 +66,16 @@ interface OutfitCardProps {
   subscription: SubscriptionWithPlan | null;
   /** Caller's profile — supplies brand kit assets for Premium exports. */
   profile: Profile | null;
+  /** When set, shows a delete button; called after the outfit is deleted. */
+  onDeleted?: (id: string) => void;
 }
 
-export function OutfitCard({ outfit, subscription, profile }: OutfitCardProps) {
+export function OutfitCard({
+  outfit,
+  subscription,
+  profile,
+  onDeleted,
+}: OutfitCardProps) {
   const plan = subscription?.plan ?? null;
   const items = outfit.outfit_items ?? [];
   const existingContent = outfit.outfit_content?.[0] ?? null;
@@ -75,6 +88,7 @@ export function OutfitCard({ outfit, subscription, profile }: OutfitCardProps) {
   const [copied, setCopied] = useState(false);
   const [formatId, setFormatId] = useState(DEFAULT_EXPORT_FORMAT.id);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [language, setLanguage] = useState<CaptionLanguage>(
     (existingContent?.language as CaptionLanguage) ?? "en"
   );
@@ -265,6 +279,19 @@ export function OutfitCard({ outfit, subscription, profile }: OutfitCardProps) {
             )}
             {copied ? "Copied!" : "Share"}
           </Button>
+
+          {onDeleted && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmDelete(true)}
+              aria-label="Delete outfit"
+              title="Delete outfit"
+              className="text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
 
           {content && (
             <div className="flex items-center gap-1.5">
@@ -659,6 +686,18 @@ export function OutfitCard({ outfit, subscription, profile }: OutfitCardProps) {
     )}
 
     <TopUpModal open={showTopUpModal} onOpenChange={setShowTopUpModal} />
+    {onDeleted && (
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this outfit?"
+        description="Shared links to it will stop working."
+        onConfirm={async () => {
+          await deleteOutfit(createClient(), outfit.id);
+          onDeleted(outfit.id);
+        }}
+      />
+    )}
     </>
   );
 }
