@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Loader2, AlertCircle, PackageOpen, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -26,10 +27,33 @@ function matchesSearch(p: ProductWithAttributes, query: string): boolean {
 }
 
 export default function ProductsPage() {
+  // useSearchParams needs a Suspense boundary for `next build`.
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-64 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <ProductsPageContent />
+    </Suspense>
+  );
+}
+
+function ProductsPageContent() {
+  const searchParams = useSearchParams();
+  const urlQuery = searchParams.get("q") ?? "";
   const [products, setProducts] = useState<ProductWithAttributes[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(urlQuery);
+
+  // Header search links here with ?q=<name>; follow it even when
+  // we're already on /products (no remount).
+  useEffect(() => {
+    setSearch(urlQuery);
+  }, [urlQuery]);
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);

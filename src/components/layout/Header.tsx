@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Bell, LogOut, Search } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSession } from "@/components/providers/AuthProvider";
 import { useLogout } from "@/lib/hooks/use-logout";
 import { MobileSidebar } from "@/components/layout/MobileSidebar";
+import { NotificationBell } from "@/components/layout/NotificationBell";
+import { GlobalSearch } from "@/components/layout/GlobalSearch";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentSubscription } from "@/lib/supabase/queries";
 import type { SubscriptionWithPlan } from "@/lib/supabase/types";
@@ -21,6 +22,7 @@ const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/products": "Products",
   "/outfits": "Outfits",
+  "/analytics": "Analytics",
   "/export": "Export",
   "/billing": "Billing",
 };
@@ -63,18 +65,9 @@ export function Header() {
 
       {/* Right section */}
       <div className="flex items-center gap-3">
-        <div className="relative hidden md:block">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search..."
-            className="w-64 pl-9"
-          />
-        </div>
+        <GlobalSearch />
 
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-4 w-4" />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive" />
-        </Button>
+        <NotificationBell subscription={subscription} userId={user?.id} />
 
         <div className="flex items-center gap-2 pl-1">
           {subscription &&
