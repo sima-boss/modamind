@@ -49,7 +49,7 @@ export function LookbookView({ id }: LookbookViewProps) {
 
     async function load() {
       try {
-        const res = await fetch(`/api/outfits/${id}`);
+        const res = await fetch(`/api/outfits/${id}`, { cache: "no-store" });
         if (!res.ok) {
           if (active) setError(res.status === 404 ? "not_found" : "failed");
           return;
