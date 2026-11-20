@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getAnthropicModel } from "@/lib/ai-config";
+import {
+  ImageFetchError,
+  fetchImageWithLimits,
+  isAllowedImageUrl,
+} from "@/lib/image-fetch";
+import { createCooldownLimiter } from "@/lib/rate-limit";
+
+// Max 1 analysis per user+product per 30s. In-memory (per server instance).
+const analyzeLimiter = createCooldownLimiter(30_000);
 
 const SYSTEM_PROMPT = `You are a fashion product analyst. Given a product image, return a JSON object with these exact fields:
 
@@ -35,12 +45,51 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { imageUrl } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const productId: unknown = body?.productId;
+    const force = body?.force === true;
 
-    if (!imageUrl || typeof imageUrl !== "string") {
+    if (!productId || typeof productId !== "string") {
+      return NextResponse.json({ error: "productId is required" }, { status: 400 });
+    }
+
+    // Load via the user's client so RLS guarantees they own the product. The
+    // image URL comes from the DB, never from the request body.
+    const { data: product, error: productError } = await supabase
+      .from("products")
+      .select("id, image_url, product_attributes(id)")
+      .eq("id", productId)
+      .maybeSingle();
+
+    if (productError || !product) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+
+    const imageUrl = product.image_url;
+    if (!imageUrl) {
+      return NextResponse.json({ error: "Product has no image" }, { status: 400 });
+    }
+
+    const existingAttrs = (product as { product_attributes?: unknown[] })
+      .product_attributes;
+    if (!force && Array.isArray(existingAttrs) && existingAttrs.length > 0) {
+      return NextResponse.json({ error: "Product already analyzed" }, { status: 409 });
+    }
+
+    if (!isAllowedImageUrl(imageUrl, process.env.NEXT_PUBLIC_SUPABASE_URL)) {
+      return NextResponse.json({ error: "Image URL is not allowed" }, { status: 400 });
+    }
+
+    const limit = analyzeLimiter.check(`${user.id}:${product.id}`);
+    if (!limit.ok) {
       return NextResponse.json(
-        { error: "imageUrl is required" },
-        { status: 400 }
+        {
+          error: `Please wait ${limit.retryAfterSec}s before analyzing this product again.`,
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(limit.retryAfterSec) },
+        }
       );
     }
 
@@ -57,18 +106,18 @@ export async function POST(req: NextRequest) {
     // picker allowed) — Claude's vision API rejects anything outside
     // JPEG/PNG/GIF/WEBP with "The file format is invalid or unsupported", so
     // normalize to PNG whenever the source format isn't one of those four.
-    const imageRes = await fetch(imageUrl);
-    if (!imageRes.ok) {
-      return NextResponse.json(
-        {
-          error: `Could not fetch the image (HTTP ${imageRes.status}). The image URL may be invalid or inaccessible.`,
-        },
-        { status: 502 }
-      );
+    let fetchedBuffer: Buffer;
+    let fetchedMediaType: string | null;
+    try {
+      const fetched = await fetchImageWithLimits(imageUrl);
+      fetchedBuffer = fetched.buffer;
+      fetchedMediaType = fetched.contentType;
+    } catch (err) {
+      if (err instanceof ImageFetchError) {
+        return NextResponse.json({ error: err.message }, { status: err.status });
+      }
+      throw err;
     }
-
-    const fetchedBuffer = Buffer.from(await imageRes.arrayBuffer());
-    const fetchedMediaType = imageRes.headers.get("content-type")?.split(";")[0];
 
     let mediaType: SupportedMediaType;
     let imageData: Buffer;
@@ -83,7 +132,7 @@ export async function POST(req: NextRequest) {
     const client = new Anthropic({ apiKey });
 
     const response = await client.messages.create({
-      model: "claude-sonnet-5",
+      model: getAnthropicModel(),
       max_tokens: 512,
       system: SYSTEM_PROMPT,
       messages: [
@@ -109,10 +158,7 @@ export async function POST(req: NextRequest) {
 
     const textBlock = response.content.find((b) => b.type === "text");
     if (!textBlock) {
-      return NextResponse.json(
-        { error: "No text response from AI" },
-        { status: 502 }
-      );
+      return NextResponse.json({ error: "No text response from AI" }, { status: 502 });
     }
 
     // Parse JSON — strip possible markdown fences

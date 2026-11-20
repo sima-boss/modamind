@@ -46,7 +46,7 @@ export function ProductCard({ product, onProductChanged }: ProductCardProps) {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: product.image_url }),
+        body: JSON.stringify({ productId: product.id }),
       });
       const data = await res.json();
       if (!res.ok) {
