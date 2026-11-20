@@ -45,9 +45,8 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
-  // Theme-fit pre-check — runs before credits are charged and before
-  // generateOutfits() clears the existing set, so a catalog that can't
-  // support a theme costs nothing and loses nothing.
+  // Theme-fit pre-check — runs before credits are charged, so a catalog
+  // that can't support a theme costs nothing.
   let products: Awaited<ReturnType<typeof getProducts>>;
   try {
     products = await getProducts(supabase);

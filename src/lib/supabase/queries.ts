@@ -105,6 +105,54 @@ export async function getOutfits(supabase: Client) {
   return data as OutfitWithDetails[];
 }
 
+/** Outfits with the given ids (RLS-scoped), newest first. */
+export async function getOutfitsByIds(supabase: Client, ids: string[]) {
+  if (ids.length === 0) return [] as OutfitWithDetails[];
+  const { data, error } = await supabase
+    .from("outfits")
+    .select(
+      `
+      *,
+      outfit_items(*, products(*, product_attributes(*))),
+      outfit_content(*)
+    `
+    )
+    .in("id", ids)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data as OutfitWithDetails[];
+}
+
+/** Deletes one of the caller's outfits; items + content go with it via
+ * ON DELETE CASCADE. RLS turns a delete of someone else's outfit into a
+ * silent no-op, so zero affected rows is reported as an error. */
+export async function deleteOutfit(supabase: Client, id: string) {
+  const { data, error } = await supabase
+    .from("outfits")
+    .delete()
+    .eq("id", id)
+    .select("id");
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error("Outfit not found or already deleted.");
+  }
+}
+
+/** Deletes all of the caller's outfits (items + content cascade). The
+ * explicit owner filter is required by supabase-js; RLS still enforces it. */
+export async function deleteAllOutfits(supabase: Client) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("You need to be signed in.");
+  const { error } = await supabase
+    .from("outfits")
+    .delete()
+    .eq("owner_id", user.id);
+  if (error) throw error;
+}
+
 // ── Global search ───────────────────────────────────────────
 // All filters use separate .ilike()/.filter() calls on the RLS-scoped
 // client — never .or() — so user input can't change the filter syntax.
