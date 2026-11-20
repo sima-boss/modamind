@@ -105,6 +105,70 @@ export async function getOutfits(supabase: Client) {
   return data as OutfitWithDetails[];
 }
 
+// ── Global search ───────────────────────────────────────────
+// All filters use separate .ilike()/.filter() calls on the RLS-scoped
+// client — never .or() — so user input can't change the filter syntax.
+
+export type ProductSearchResult = Pick<Product, "id" | "name" | "category">;
+export type OutfitSearchResult = { id: string; title: string | null; theme_name: string | null };
+
+export async function countProducts(supabase: Client): Promise<number> {
+  const { count, error } = await supabase
+    .from("products")
+    .select("id", { count: "exact", head: true });
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/** Matches product name or category (case-insensitive substring) and
+ * style tags (exact, case-insensitive). `pattern` must come from
+ * toIlikePattern() in @/lib/search. */
+export async function searchProducts(
+  supabase: Client,
+  query: string,
+  pattern: string,
+  limit: number
+): Promise<ProductSearchResult[]> {
+  const columns = "id, name, category";
+  const [byName, byCategory, byTag] = await Promise.all([
+    supabase.from("products").select(columns).ilike("name", pattern).limit(limit),
+    supabase.from("products").select(columns).ilike("category", pattern).limit(limit),
+    supabase
+      .from("product_attributes")
+      .select("products!inner(id, name, category)")
+      // JSON.stringify yields a valid, quoted jsonb array literal.
+      .filter("style_tags", "cs", JSON.stringify([query.trim().toLowerCase()]))
+      .limit(limit),
+  ]);
+
+  const error = byName.error ?? byCategory.error ?? byTag.error;
+  if (error) throw error;
+
+  const tagged = (byTag.data ?? []).flatMap(
+    (row) => (row as unknown as { products: ProductSearchResult | null }).products ?? []
+  );
+  const merged = new Map<string, ProductSearchResult>();
+  for (const p of [...(byName.data ?? []), ...(byCategory.data ?? []), ...tagged]) {
+    if (!merged.has(p.id)) merged.set(p.id, p);
+  }
+  return Array.from(merged.values()).slice(0, limit);
+}
+
+export async function searchOutfits(
+  supabase: Client,
+  pattern: string,
+  limit: number
+): Promise<OutfitSearchResult[]> {
+  const { data, error } = await supabase
+    .from("outfits")
+    .select("id, title, theme_name")
+    .ilike("theme_name", pattern)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function insertOutfitContent(
   supabase: Client,
   content: Database["public"]["Tables"]["outfit_content"]["Insert"]

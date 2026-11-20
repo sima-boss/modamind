@@ -115,7 +115,7 @@ export function AddProductDialog({ onProductAdded }: AddProductDialogProps) {
           const res = await fetch("/api/analyze", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imageUrl }),
+            body: JSON.stringify({ productId: product.id }),
           });
 
           if (res.ok) {

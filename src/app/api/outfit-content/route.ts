@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { generateContentSchema } from "@/lib/validation/outfits";
+import { getAnthropicModel } from "@/lib/ai-config";
 import {
   PlanGateError,
   canUseCaptionFormat,
@@ -170,7 +171,7 @@ export async function POST(req: NextRequest) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-5",
+        model: getAnthropicModel(),
         max_tokens: 512,
         system: buildSystemPrompt(language, format),
         messages: [{ role: "user", content: userMessage }],

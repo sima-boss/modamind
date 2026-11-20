@@ -18,9 +18,15 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { createClient } from "@/lib/supabase/client";
 import { deleteOutfitContent, insertOutfitContent } from "@/lib/supabase/queries";
-import type { OutfitContent, OutfitWithDetails, Plan, Profile } from "@/lib/supabase/types";
+import type {
+  OutfitContent,
+  OutfitWithDetails,
+  Profile,
+  SubscriptionWithPlan,
+} from "@/lib/supabase/types";
 import {
   canUseCaptionFormat,
   canUseCaptionLanguage,
@@ -39,6 +45,7 @@ import {
 import { ExportableOutfitCard } from "./ExportableOutfitCard";
 import { TopUpModal } from "@/components/billing/TopUpModal";
 import { SUBSCRIPTION_CHANGED_EVENT } from "@/lib/events";
+import { getRemaining } from "@/lib/usage";
 
 const CAPTION_HEADING: Record<CaptionFormat, string> = {
   generic: "Caption",
@@ -48,14 +55,15 @@ const CAPTION_HEADING: Record<CaptionFormat, string> = {
 
 interface OutfitCardProps {
   outfit: OutfitWithDetails;
-  /** Caller's current plan — drives caption language/format + brand kit
-   * gating. Null while the subscription is still loading. */
-  plan: Plan | null;
+  /** Caller's subscription — drives caption language/format + brand kit
+   * gating and the remaining-credits tooltip. Null while loading. */
+  subscription: SubscriptionWithPlan | null;
   /** Caller's profile — supplies brand kit assets for Premium exports. */
   profile: Profile | null;
 }
 
-export function OutfitCard({ outfit, plan, profile }: OutfitCardProps) {
+export function OutfitCard({ outfit, subscription, profile }: OutfitCardProps) {
+  const plan = subscription?.plan ?? null;
   const items = outfit.outfit_items ?? [];
   const existingContent = outfit.outfit_content?.[0] ?? null;
   const [content, setContent] = useState<OutfitContent | null>(existingContent);
@@ -79,6 +87,17 @@ export function OutfitCard({ outfit, plan, profile }: OutfitCardProps) {
   const canInstagram = plan ? canUseCaptionFormat(plan, "instagram") : false;
   const canTiktok = plan ? canUseCaptionFormat(plan, "tiktok") : false;
   const canBrandKit = plan?.has_brand_kit ?? false;
+  const captionCreditHint = (() => {
+    if (!subscription) return "Uses 1 AI caption credit.";
+    const { isUnlimited, totalAvailable } = getRemaining(
+      subscription.plan,
+      subscription,
+      "ai_caption"
+    );
+    return isUnlimited
+      ? "Uses 1 AI caption credit. Unlimited captions on your plan."
+      : `Uses 1 AI caption credit. You have ${totalAvailable} left`;
+  })();
   const hasBrandAssets =
     canBrandKit &&
     !!profile &&
@@ -512,22 +531,33 @@ export function OutfitCard({ outfit, plan, profile }: OutfitCardProps) {
           </Link>
         )}
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleGenerateContent}
-          disabled={generating}
-          className="ml-auto"
-        >
-          {generating ? (
-            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-          ) : content ? (
-            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-          ) : (
-            <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-          )}
-          {generating ? "Generating..." : content ? "Regenerate" : "Generate Content"}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {/* span keeps the tooltip working while the button is disabled */}
+            <span className="ml-auto inline-flex" tabIndex={generating ? 0 : -1}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateContent}
+                disabled={generating}
+              >
+                {generating ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : content ? (
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                ) : (
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                {generating
+                  ? "Generating..."
+                  : content
+                    ? "Regenerate (1 credit)"
+                    : "Generate Content (1 credit)"}
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{captionCreditHint}</TooltipContent>
+        </Tooltip>
       </div>
 
       {/* AI content */}

@@ -89,11 +89,26 @@ export default function OutfitsPage() {
     fetchOutfits();
   }, [fetchOutfits]);
 
+  // Keep credit counts (caption tooltip, out-of-credits state) current
+  // after captions/generations without refetching every outfit.
+  useEffect(() => {
+    function refreshSubscription() {
+      getCurrentSubscription(createClient())
+        .then(setSubscription)
+        .catch(() => {});
+    }
+    window.addEventListener(SUBSCRIPTION_CHANGED_EVENT, refreshSubscription);
+    return () =>
+      window.removeEventListener(SUBSCRIPTION_CHANGED_EVENT, refreshSubscription);
+  }, []);
+
   const outfitsRemaining = subscription
     ? getRemaining(subscription.plan, subscription, "outfit_generation")
         .totalAvailable
     : null;
   const outOfCredits = outfitsRemaining !== null && outfitsRemaining <= 0;
+  // Skipped (off-theme) themes aren't charged, so this is a ceiling.
+  const maxCost = selectedThemes.length * countPerTheme;
 
   // Bulk generation (more than one outfit per request) is Premium only.
   // Default to locked until the plan is known so we never flash an
@@ -264,11 +279,18 @@ export default function OutfitsPage() {
             )}
           </div>
 
-          <Button onClick={handleGenerate} disabled={generating}>
-            {generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {!generating && <Sparkles className="mr-2 h-4 w-4" />}
-            {outOfCredits ? "Buy more outfits" : "Generate Outfits"}
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            <Button onClick={handleGenerate} disabled={generating}>
+              {generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {!generating && <Sparkles className="mr-2 h-4 w-4" />}
+              {outOfCredits ? "Buy more outfits" : "Generate Outfits"}
+            </Button>
+            {!outOfCredits && (
+              <p className="text-xs text-muted-foreground">
+                Uses up to {maxCost} credit{maxCost === 1 ? "" : "s"}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -339,7 +361,7 @@ export default function OutfitsPage() {
                 <OutfitCard
                   key={outfit.id}
                   outfit={outfit}
-                  plan={subscription?.plan ?? null}
+                  subscription={subscription}
                   profile={profile}
                 />
               ))}

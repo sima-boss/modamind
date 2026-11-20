@@ -69,6 +69,22 @@ export default function BillingPage() {
     fetchData();
   }, [fetchData]);
 
+  // Demo tools are only shown to users the server allows (non-production, or
+  // emails listed in DEMO_EMAILS). Hidden while loading and on error.
+  const [canUseDemoTools, setCanUseDemoTools] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/billing/debug-set-usage-near-limit")
+      .then((res) => (res.ok ? res.json() : { allowed: false }))
+      .then((data: { allowed?: boolean }) => {
+        if (!cancelled) setCanUseDemoTools(data.allowed === true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function runAction(fn: () => Promise<void>, successMsg?: string) {
     setActionLoading(true);
     setError(null);
@@ -177,8 +193,7 @@ export default function BillingPage() {
                 Simulate renewal (Demo)
               </Button>
               <p className="max-w-[220px] text-xs text-muted-foreground">
-                Demo only — normally happens automatically when the billing
-                period ends.
+                Demo only — normally happens automatically when the billing period ends.
               </p>
             </div>
           </div>
@@ -199,11 +214,7 @@ export default function BillingPage() {
             </p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowTopUpModal(true)}
-        >
+        <Button variant="outline" size="sm" onClick={() => setShowTopUpModal(true)}>
           <ShoppingBag className="mr-2 h-4 w-4" />
           Buy more credits
         </Button>
@@ -226,9 +237,7 @@ export default function BillingPage() {
                 </Badge>
               );
             } else if (isPendingTarget) {
-              action = (
-                <Badge className="w-full justify-center py-1.5">Scheduled</Badge>
-              );
+              action = <Badge className="w-full justify-center py-1.5">Scheduled</Badge>;
             } else {
               const button = (
                 <Button
@@ -271,10 +280,7 @@ export default function BillingPage() {
         ) : (
           <div className="divide-y">
             {transactions.map((t) => (
-              <div
-                key={t.id}
-                className="flex items-center gap-3 px-5 py-3"
-              >
+              <div key={t.id} className="flex items-center gap-3 px-5 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{t.description}</p>
                   <p className="text-xs text-muted-foreground">
@@ -297,27 +303,25 @@ export default function BillingPage() {
       </div>
 
       {/* Demo tools */}
-      <div className="rounded-xl border border-dashed bg-muted/30 p-5">
-        <div className="mb-1 flex items-center gap-2">
-          <Wrench className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-semibold text-muted-foreground">
-            Demo tools
-          </h3>
+      {canUseDemoTools && (
+        <div className="rounded-xl border border-dashed bg-muted/30 p-5">
+          <div className="mb-1 flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-muted-foreground">Demo tools</h3>
+          </div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            For testing this project only — not part of the real product.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={actionLoading}
+            onClick={() => runAction(() => postBilling("debug-set-usage-near-limit"))}
+          >
+            Set my usage near the limit
+          </Button>
         </div>
-        <p className="mb-3 text-xs text-muted-foreground">
-          For testing this project only — not part of the real product.
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={actionLoading}
-          onClick={() =>
-            runAction(() => postBilling("debug-set-usage-near-limit"))
-          }
-        >
-          Set my usage near the limit
-        </Button>
-      </div>
+      )}
 
       <Dialog open={!!dialogPlan} onOpenChange={(open) => !open && setDialogPlan(null)}>
         <DialogContent>
@@ -326,13 +330,11 @@ export default function BillingPage() {
               {isUpgrade ? "Confirm upgrade" : "Confirm downgrade"}
             </DialogTitle>
             <DialogDescription>
-              {dialogPlan && isUpgrade && (
-                <>You will pay {formatAED(priceDiff)} now.</>
-              )}
+              {dialogPlan && isUpgrade && <>You will pay {formatAED(priceDiff)} now.</>}
               {dialogPlan && !isUpgrade && (
                 <>
-                  Your plan will change to <strong>{dialogPlan.name}</strong>{" "}
-                  on {formatDate(subscription.current_period_end)}.
+                  Your plan will change to <strong>{dialogPlan.name}</strong> on{" "}
+                  {formatDate(subscription.current_period_end)}.
                 </>
               )}
             </DialogDescription>
