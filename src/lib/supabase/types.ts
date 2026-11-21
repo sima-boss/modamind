@@ -477,6 +477,31 @@ export interface Database {
         Args: Record<string, never>;
         Returns: { category: string; total: number }[];
       };
+      analytics_range_daily_usage: {
+        Args: { p_from: string; p_to: string };
+        Returns: { day: string; outfits: number; captions: number }[];
+      };
+      analytics_range_summary: {
+        Args: { p_from: string; p_to: string };
+        Returns: {
+          outfits: number;
+          captions: number;
+          outfits_prev: number;
+          captions_prev: number;
+          saved_outfits: number;
+          active_days: number;
+          busiest_day: string | null;
+          busiest_day_count: number;
+        }[];
+      };
+      analytics_range_outfits_by_theme: {
+        Args: { p_from: string; p_to: string };
+        Returns: { theme: string; total: number }[];
+      };
+      analytics_range_captions_breakdown: {
+        Args: { p_from: string; p_to: string };
+        Returns: { language: string; format: string; total: number }[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
@@ -487,6 +512,8 @@ export type AnalyticsDailyPoint =
   Database["public"]["Functions"]["analytics_daily_usage"]["Returns"][number];
 export type AnalyticsSummary =
   Database["public"]["Functions"]["analytics_summary"]["Returns"][number];
+export type AnalyticsRangeSummary =
+  Database["public"]["Functions"]["analytics_range_summary"]["Returns"][number];
 
 // Convenience aliases
 export type Product = Database["public"]["Tables"]["products"]["Row"];

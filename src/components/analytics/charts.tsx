@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import {
   Bar,
   BarChart,
@@ -16,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { cn } from "@/lib/utils";
+import { formatDay, type TrendPoint } from "@/lib/analytics/date-range";
 
 // Series colors follow the app theme: --primary for the main series and
 // the brand violet (same value the dark theme uses for primary) for the second.
@@ -40,47 +39,31 @@ const axisProps = {
 } as const;
 
 function shortDate(iso: string) {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-  });
+  return formatDay(iso);
 }
 
 export function UsageTrendChart({
   data,
-  allowRangeToggle,
+  bucket,
 }: {
-  data: { day: string; outfits: number; captions: number }[];
-  /** Full view gets a 30/60-day toggle (data holds 60 days). */
-  allowRangeToggle: boolean;
+  /** Zero-filled points spanning exactly the selected range. */
+  data: TrendPoint[];
+  bucket: "day" | "week";
 }) {
-  const [range, setRange] = useState<30 | 60>(30);
-  const visible = data.slice(-range);
+  const ends = new Map(data.map((p) => [p.day, p.end]));
+  const tooltipLabel = (l: unknown) => {
+    const day = String(l);
+    const end = ends.get(day);
+    return bucket === "week" && end && end !== day
+      ? `${shortDate(day)} – ${shortDate(end)}`
+      : shortDate(day);
+  };
 
   return (
     <div>
-      {allowRangeToggle && (
-        <div className="mb-3 inline-flex rounded-lg border p-0.5 text-xs">
-          {([30, 60] as const).map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => setRange(r)}
-              className={cn(
-                "rounded-md px-2.5 py-1 font-medium transition-colors",
-                range === r
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {r} days
-            </button>
-          ))}
-        </div>
-      )}
       <div className="h-64 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={visible} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+          <LineChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
             <CartesianGrid stroke={GRID} strokeDasharray="3 3" vertical={false} />
             <XAxis
               dataKey="day"
@@ -91,7 +74,7 @@ export function UsageTrendChart({
             <YAxis allowDecimals={false} {...axisProps} />
             <Tooltip
               contentStyle={tooltipStyle}
-              labelFormatter={(l) => shortDate(String(l))}
+              labelFormatter={tooltipLabel}
             />
             {/* itemSorter={null}: keep declared order (default sorts A–Z). */}
             <Legend
