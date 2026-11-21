@@ -13,7 +13,7 @@ import type {
   UsageEvent,
   Profile,
   AnalyticsDailyPoint,
-  AnalyticsSummary,
+  AnalyticsRangeSummary,
 } from "./types";
 
 type Client = SupabaseClient<Database>;
@@ -338,40 +338,63 @@ export async function updateProfile(
 }
 
 // ── Analytics ──────────────────────────────────────────────
-// Backed by the SECURITY INVOKER functions in 019_analytics_functions.sql,
-// so RLS scopes every result to the signed-in user.
+// Backed by the SECURITY INVOKER range functions in
+// 022_analytics_date_range.sql (RLS scopes every result to the signed-in
+// user). from/to are inclusive Asia/Dubai calendar days, "YYYY-MM-DD".
 
-export async function getAnalyticsDailyUsage(
+export async function getAnalyticsRangeDailyUsage(
   supabase: Client,
-  days = 30
+  from: string,
+  to: string
 ): Promise<AnalyticsDailyPoint[]> {
-  const { data, error } = await supabase.rpc("analytics_daily_usage", {
-    p_days: days,
+  const { data, error } = await supabase.rpc("analytics_range_daily_usage", {
+    p_from: from,
+    p_to: to,
   });
   if (error) throw error;
   return data ?? [];
 }
 
-export async function getAnalyticsSummary(
-  supabase: Client
-): Promise<AnalyticsSummary> {
-  const { data, error } = await supabase.rpc("analytics_summary");
+export async function getAnalyticsRangeSummary(
+  supabase: Client,
+  from: string,
+  to: string
+): Promise<AnalyticsRangeSummary> {
+  const { data, error } = await supabase.rpc("analytics_range_summary", {
+    p_from: from,
+    p_to: to,
+  });
   if (error) throw error;
   return data![0];
 }
 
-export async function getAnalyticsOutfitsByTheme(supabase: Client) {
-  const { data, error } = await supabase.rpc("analytics_outfits_by_theme");
+export async function getAnalyticsRangeOutfitsByTheme(
+  supabase: Client,
+  from: string,
+  to: string
+) {
+  const { data, error } = await supabase.rpc("analytics_range_outfits_by_theme", {
+    p_from: from,
+    p_to: to,
+  });
   if (error) throw error;
   return data ?? [];
 }
 
-export async function getAnalyticsCaptionsBreakdown(supabase: Client) {
-  const { data, error } = await supabase.rpc("analytics_captions_breakdown");
+export async function getAnalyticsRangeCaptionsBreakdown(
+  supabase: Client,
+  from: string,
+  to: string
+) {
+  const { data, error } = await supabase.rpc("analytics_range_captions_breakdown", {
+    p_from: from,
+    p_to: to,
+  });
   if (error) throw error;
   return data ?? [];
 }
 
+// Not date-based: the current catalogue (019_analytics_functions.sql).
 export async function getAnalyticsProductsByCategory(supabase: Client) {
   const { data, error } = await supabase.rpc("analytics_products_by_category");
   if (error) throw error;
